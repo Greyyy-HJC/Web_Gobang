@@ -310,6 +310,24 @@ export default function Home() {
               </select>
             </div>
             
+            {/* 算法说明文本 */}
+            <div className="mt-2">
+              <p className="text-sm text-blue-600">
+                {side === 'black' 
+                  ? blackApiConfig.computerAlgorithm === 'LocalEval'
+                    ? '局部评估：对棋盘位置进行静态评估，计算落子点周围的棋型分值。运算速度快，适合初学者。'
+                    : blackApiConfig.computerAlgorithm === 'NeuralNetwork'
+                    ? '神经网络：使用简化神经网络评估棋局，能识别基本棋型并进行防守。运算效率高，策略更灵活。'
+                    : '威胁空间搜索：分析棋盘威胁空间，优先形成连续攻击态势。识别活三、活四等高级棋型，具有较强攻击性。'
+                  : whiteApiConfig.computerAlgorithm === 'LocalEval'
+                    ? '局部评估：对棋盘位置进行静态评估，计算落子点周围的棋型分值。运算速度快，适合初学者。'
+                    : whiteApiConfig.computerAlgorithm === 'NeuralNetwork'
+                    ? '神经网络：使用简化神经网络评估棋局，能识别基本棋型并进行防守。运算效率高，策略更灵活。'
+                    : '威胁空间搜索：分析棋盘威胁空间，优先形成连续攻击态势。识别活三、活四等高级棋型，具有较强攻击性。'
+                }
+              </p>
+            </div>
+            
             <div className="mt-3 p-3 bg-info bg-opacity-10 rounded-md">
               <p className="text-sm">电脑棋手使用本地算法，可在任何环境下运行（包括静态部署）</p>
             </div>
