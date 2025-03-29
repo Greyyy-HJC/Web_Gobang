@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import GameBoard from './components/GameBoard';
 
-type PlayerType = 'human' | 'ai';
+type PlayerType = 'human' | 'ai' | 'computer';
 type GameModeSetting = {
   black: PlayerType;
   white: PlayerType;
@@ -18,6 +18,20 @@ interface ProviderConfig {
 }
 
 export default function Home() {
+  // 检测是否在静态环境中
+  const [isStaticEnv, setIsStaticEnv] = useState(false);
+  
+  // 初始化时检测环境
+  useEffect(() => {
+    const staticEnv = typeof window !== 'undefined' && (
+      window.location.hostname.includes('github.io') ||
+      window.location.pathname.includes('/Web_Gobang') ||
+      window.location.protocol === 'file:' ||
+      process.env.NODE_ENV === 'production'
+    );
+    setIsStaticEnv(staticEnv);
+  }, []);
+
   // API提供商配置
   const [providers] = useState<ProviderConfig[]>([
     {
@@ -90,47 +104,47 @@ export default function Home() {
   };
 
   // 获取提供商的可用模型
-  const getModelsForProvider = (provider: Provider): string[] => {
+  const getModelsForProvider = (provider: Provider, customUrl: string): string[] => {
     return getProviderConfig(provider).models;
   };
 
   // 当提供商变化时更新模型
   useEffect(() => {
-    const models = getModelsForProvider(blackProvider);
+    const models = getModelsForProvider(blackProvider, blackCustomBaseUrl);
     if (!models.includes(blackModel)) {
       setBlackModel(models[0]);
     }
-  }, [blackProvider, blackModel]);
+  }, [blackProvider, blackModel, blackCustomBaseUrl]);
 
   useEffect(() => {
-    const models = getModelsForProvider(whiteProvider);
+    const models = getModelsForProvider(whiteProvider, whiteCustomBaseUrl);
     if (!models.includes(whiteModel)) {
       setWhiteModel(models[0]);
     }
-  }, [whiteProvider, whiteModel]);
+  }, [whiteProvider, whiteModel, whiteCustomBaseUrl]);
   
   const isAIvsAI = gameModeSetting.black === 'ai' && gameModeSetting.white === 'ai';
   const isHumanVsHuman = gameModeSetting.black === 'human' && gameModeSetting.white === 'human';
 
   const handleStartGame = () => {
-    // 验证输入
-    if (gameModeSetting.black === 'ai' && !blackApiKey) {
-      alert('请为黑方AI输入API密钥');
-      return;
-    }
-    if (gameModeSetting.white === 'ai' && !whiteApiKey) {
-      alert('请为白方AI输入API密钥');
-      return;
-    }
-    
-    if (blackProvider === 'Custom' && !blackCustomBaseUrl) {
-      alert('请为黑方AI输入自定义API基础URL');
-      return;
-    }
-    
-    if (whiteProvider === 'Custom' && !whiteCustomBaseUrl) {
-      alert('请为白方AI输入自定义API基础URL');
-      return;
+    // 只在非静态环境下验证API设置
+    if (!isStaticEnv) {
+      // 验证输入
+      if (gameModeSetting.black === 'ai' && !blackApiKey) {
+        // 不直接阻止游戏启动，在API调用时会显示错误
+        console.warn('警告：黑方AI缺少API密钥，可能导致API调用失败');
+      }
+      if (gameModeSetting.white === 'ai' && !whiteApiKey) {
+        console.warn('警告：白方AI缺少API密钥，可能导致API调用失败');
+      }
+      
+      if (blackProvider === 'Custom' && !blackCustomBaseUrl) {
+        console.warn('警告：黑方AI缺少自定义API基础URL，可能导致API调用失败');
+      }
+      
+      if (whiteProvider === 'Custom' && !whiteCustomBaseUrl) {
+        console.warn('警告：白方AI缺少自定义API基础URL，可能导致API调用失败');
+      }
     }
     
     setGameStarted(true);
@@ -170,8 +184,15 @@ export default function Home() {
             })}
           >
             <option value="human">人类棋手</option>
-            <option value="ai">AI棋手</option>
+            {!isStaticEnv && <option value="ai">AI棋手</option>}
+            {isStaticEnv && <option value="ai" disabled title="静态部署环境不支持AI棋手">AI棋手 (仅本地开发可用)</option>}
+            <option value="computer">电脑棋手</option>
           </select>
+          {isStaticEnv && playerType === 'ai' && (
+            <div className="text-sm text-warning mt-1">
+              注意：在静态部署环境下，AI棋手将使用本地AI算法，不会调用外部API
+            </div>
+          )}
         </div>
         
         {playerType === 'human' ? (
@@ -187,6 +208,10 @@ export default function Home() {
               placeholder="输入棋手ID"
             />
           </div>
+        ) : playerType === 'computer' ? (
+          <div className="mt-3 p-3 bg-info bg-opacity-10 rounded-md">
+            <p className="text-sm">电脑棋手使用本地AI算法，无需额外设置。</p>
+          </div>
         ) : (
           <>
             <div className="form-control mt-3">
@@ -197,6 +222,7 @@ export default function Home() {
                 className="select select-bordered w-full"
                 value={provider}
                 onChange={(e) => setProvider(e.target.value as Provider)}
+                disabled={isStaticEnv}
               >
                 {providers.map(p => (
                   <option key={`${side}-${p.name}`} value={p.name}>{p.name}</option>
@@ -215,24 +241,10 @@ export default function Home() {
                   value={customBaseUrl}
                   onChange={(e) => setCustomBaseUrl(e.target.value)}
                   placeholder="例如：https://api.example.com/v1"
+                  disabled={isStaticEnv}
                 />
               </div>
             )}
-            
-            <div className="form-control mt-3">
-              <label className="label">
-                <span className="label-text font-medium">选择模型</span>
-              </label>
-              <select
-                className="select select-bordered w-full"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-              >
-                {getModelsForProvider(provider).map(m => (
-                  <option key={`${side}-${m}`} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
             
             <div className="form-control mt-3">
               <label className="label">
@@ -244,13 +256,24 @@ export default function Home() {
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="输入API密钥"
+                disabled={isStaticEnv}
               />
             </div>
             
-            <div className="mt-3 bg-base-300 p-2 rounded-md text-xs">
-              <p className="font-medium">API信息:</p>
-              <p>基础URL: {provider === 'Custom' ? customBaseUrl : getProviderConfig(provider).baseUrl}</p>
-              <p>模型: {model}</p>
+            <div className="form-control mt-3">
+              <label className="label">
+                <span className="label-text font-medium">选择模型</span>
+              </label>
+              <select
+                className="select select-bordered w-full"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={isStaticEnv}
+              >
+                {getModelsForProvider(provider, customBaseUrl).map(m => (
+                  <option key={`${side}-${m}`} value={m}>{m}</option>
+                ))}
+              </select>
             </div>
           </>
         )}
@@ -278,7 +301,11 @@ export default function Home() {
               {renderPlayerSettings('white')}
             </div>
             
-            {isAIvsAI && (
+            {/* 自动对弈设置 */}
+            {(isAIvsAI || 
+              (gameModeSetting.black === 'computer' && gameModeSetting.white === 'computer') ||
+              (gameModeSetting.black === 'ai' && gameModeSetting.white === 'computer') ||
+              (gameModeSetting.black === 'computer' && gameModeSetting.white === 'ai')) && (
               <div className="form-control my-4 p-4 bg-info bg-opacity-10 rounded-lg">
                 <div className="flex items-center">
                   <input 
@@ -287,7 +314,7 @@ export default function Home() {
                     checked={autoPlay}
                     onChange={(e) => setAutoPlay(e.target.checked)}
                   />
-                  <span>自动对弈模式（两AI自动对战，无需手动控制）</span>
+                  <span>自动对弈模式（自动对战，无需手动控制）</span>
                 </div>
               </div>
             )}

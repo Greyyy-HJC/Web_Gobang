@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
 type Cell = 'black' | 'white' | null;
-type PlayerType = 'human' | 'ai';
+type PlayerType = 'human' | 'ai' | 'computer';
 
 interface ApiConfig {
   apiKey: string;
@@ -311,6 +311,7 @@ export default function GameBoard({
   const [lastMove, setLastMove] = useState<{row: number, col: number} | null>(null);
   const [moveHistory, setMoveHistory] = useState<{row: number, col: number, player: 'black' | 'white'}[]>([]);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const checkWinner = (row: number, col: number, player: 'black' | 'white'): boolean => {
     const directions = [
@@ -375,13 +376,14 @@ export default function GameBoard({
     setIsThinking(true);
     try {
       const playerConfig = getCurrentPlayerConfig();
+      const playerType = getCurrentPlayerType();
       
-      // 判断是否在静态环境中运行（如GitHub Pages）或是否为生产环境
-      // 以下情况使用客户端AI逻辑:
-      // 1. 在GitHub Pages上（hostname包含github.io）
-      // 2. 当前URL包含/Web_Gobang（说明在basePath配置的环境中）
-      // 3. 使用file:///协议访问（本地静态文件）
-      // 4. 其他明确的静态托管环境
+      // 判断是否使用本地AI逻辑的情况：
+      // 1. 是电脑棋手 (computer)
+      // 2. 在GitHub Pages上（hostname包含github.io）
+      // 3. 当前URL包含/Web_Gobang（说明在basePath配置的环境中）
+      // 4. 使用file:///协议访问（本地静态文件）
+      // 5. 生产环境
       const isStaticEnv = typeof window !== 'undefined' && (
         window.location.hostname.includes('github.io') ||
         window.location.pathname.includes('/Web_Gobang') ||
@@ -389,8 +391,8 @@ export default function GameBoard({
         process.env.NODE_ENV === 'production'
       );
       
-      if (isStaticEnv) {
-        // 在静态环境中使用本地AI逻辑
+      if (playerType === 'computer' || isStaticEnv) {
+        // 使用本地AI逻辑
         console.log("使用本地AI逻辑");
         // 等待一下以模拟思考时间
         await new Promise(resolve => setTimeout(resolve, 800));
@@ -421,6 +423,21 @@ export default function GameBoard({
         });
 
         const data = await response.json();
+        
+        if (data.error) {
+          console.error('AI API返回错误:', data.error);
+          setErrorMessage(`AI API返回错误: ${data.error}。将使用本地AI算法继续游戏。`);
+          // 使用本地AI逻辑作为备选
+          const move = findBestMoveClient(board, currentPlayer);
+          if (move) {
+            const gameEnded = addMove(move.row, move.col, currentPlayer);
+            if (!gameEnded) {
+              setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+            }
+          }
+          return;
+        }
+        
         if (data.row !== undefined && data.col !== undefined) {
           const gameEnded = addMove(data.row, data.col, currentPlayer);
           
@@ -428,12 +445,23 @@ export default function GameBoard({
             // 切换到下一个玩家
             setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
           }
+        } else {
+          setErrorMessage(`AI返回了无效的移动。将使用本地AI算法继续游戏。`);
+          // 使用本地AI逻辑作为备选
+          const move = findBestMoveClient(board, currentPlayer);
+          if (move) {
+            const gameEnded = addMove(move.row, move.col, currentPlayer);
+            if (!gameEnded) {
+              setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+            }
+          }
         }
       }
     } catch (error) {
       console.error('AI 移动出错:', error);
       // 错误时尝试使用本地逻辑
       console.log("出错，降级到本地AI逻辑");
+      setErrorMessage(`API请求出错: ${error instanceof Error ? error.message : '未知错误'}。将使用本地AI算法继续游戏。`);
       const move = findBestMoveClient(board, currentPlayer);
       if (move) {
         const gameEnded = addMove(move.row, move.col, currentPlayer);
@@ -467,21 +495,22 @@ export default function GameBoard({
   const handleNextAIMove = () => {
     if (isGameOver || isThinking) return;
     
-    // 检查当前玩家是否是AI
-    if (getCurrentPlayerType() === 'ai') {
+    // 检查当前玩家是否是AI或电脑
+    if (getCurrentPlayerType() === 'ai' || getCurrentPlayerType() === 'computer') {
       makeAIMove();
     }
   };
 
   // 自动下一步（用于AI对战）
   useEffect(() => {
-    // 如果是AI的回合并且启用了自动播放
+    // 如果是AI/电脑的回合并且启用了自动播放
     if (
       !isGameOver && 
       !isThinking && 
-      getCurrentPlayerType() === 'ai' && 
-      (autoPlay || (blackPlayer === 'human' && whitePlayer === 'ai' && currentPlayer === 'white') ||
-       (blackPlayer === 'ai' && whitePlayer === 'human' && currentPlayer === 'black'))
+      (getCurrentPlayerType() === 'ai' || getCurrentPlayerType() === 'computer') && 
+      (autoPlay || 
+       (blackPlayer === 'human' && (whitePlayer === 'ai' || whitePlayer === 'computer') && currentPlayer === 'white') ||
+       ((blackPlayer === 'ai' || blackPlayer === 'computer') && whitePlayer === 'human' && currentPlayer === 'black'))
     ) {
       const timeoutId = setTimeout(() => {
         makeAIMove();
@@ -501,6 +530,7 @@ export default function GameBoard({
     setLastMove(null);
     setMoveHistory([]);
     setShowVictoryModal(false);
+    setErrorMessage(null);
   };
 
   // 获取玩家显示名称
@@ -512,6 +542,9 @@ export default function GameBoard({
     
     if (playerType === 'ai') {
       return `AI (${apiConfig.model})`;
+    }
+    if (playerType === 'computer') {
+      return `电脑棋手`;
     }
     return playerId;
   };
@@ -601,7 +634,7 @@ export default function GameBoard({
         </div>
       </div>
       
-      <div className="flex flex-col gap-4 bg-base-200 p-6 rounded-lg shadow-md w-full max-w-xl">
+      <div className="flex flex-col gap-4 bg-base-200 p-6 rounded-lg shadow-md w-full max-w-xl" style={{ maxWidth: 'calc(1.2 * 36rem)' }}>
         {/* 游戏状态和控制区 */}
         <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
           <div className="text-xl font-bold text-center md:text-left flex-1">
@@ -624,13 +657,19 @@ export default function GameBoard({
                   {getCurrentPlayerType() === 'ai' && ` (${
                     currentPlayer === 'black' ? blackApiConfig.model : whiteApiConfig.model
                   })`}
+                  {getCurrentPlayerType() === 'human' && ` (${
+                    currentPlayer === 'black' ? blackPlayerId : whitePlayerId
+                  })`}
+                  {getCurrentPlayerType() === 'computer' && ` (电脑棋手)`}
                 </span>
                 {isThinking && <div className="loading loading-spinner loading-md ml-2"></div>}
               </div>
             )}
           </div>
           <div className="flex gap-2">
-            {(blackPlayer === 'ai' && whitePlayer === 'ai' && !autoPlay && !isGameOver) && (
+            {(((blackPlayer === 'ai' || blackPlayer === 'computer') && 
+                (whitePlayer === 'ai' || whitePlayer === 'computer')) && 
+                !autoPlay && !isGameOver) && (
               <button
                 className="btn btn-primary"
                 onClick={handleNextAIMove}
@@ -655,6 +694,19 @@ export default function GameBoard({
             )}
           </div>
         </div>
+        
+        {/* 错误消息显示 */}
+        {errorMessage && (
+          <div className="alert alert-warning shadow-lg mt-2">
+            <div>
+              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <span>{errorMessage}</span>
+            </div>
+            <div className="flex-none">
+              <button className="btn btn-sm" onClick={() => setErrorMessage(null)}>关闭</button>
+            </div>
+          </div>
+        )}
         
         {/* 移动历史记录 */}
         {moveHistory.length > 0 && (

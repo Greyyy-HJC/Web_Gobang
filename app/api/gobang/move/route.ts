@@ -505,8 +505,32 @@ function findBestMove(board: Board, currentPlayer: 'black' | 'white'): { row: nu
 
 export async function POST(request: Request) {
   try {
-    const body: RequestBody = await request.json();
-    const { board, apiKey, baseUrl, model, currentPlayer } = body;
+    // 解析请求
+    const { board, apiKey, baseUrl, model, currentPlayer } = await request.json() as RequestBody;
+
+    // 验证API密钥
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'API密钥不能为空' },
+        { status: 400 }
+      );
+    }
+
+    // 验证基础URL
+    if (!baseUrl) {
+      return NextResponse.json(
+        { error: '基础URL不能为空' },
+        { status: 400 }
+      );
+    }
+
+    // 验证模型名称
+    if (!model) {
+      return NextResponse.json(
+        { error: '模型名称不能为空' },
+        { status: 400 }
+      );
+    }
 
     if (!board) {
       return NextResponse.json(
@@ -529,7 +553,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('处理移动时出错:', error);
     return NextResponse.json(
-      { error: '服务器内部错误' },
+      { error: error instanceof Error ? error.message : "发生未知错误" },
       { status: 500 }
     );
   }

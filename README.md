@@ -8,12 +8,13 @@
 
 ## 特色功能
 
-- 👥 **多种对战模式**：支持人人对战、人机对战和AI互相对战
+- 👥 **多种对战模式**：支持人人对战、人机对战、AI互相对战，以及电脑棋手对战
 - 🧠 **多AI提供商**：支持OpenAI、Anthropic、Deepseek、Qwen、Gemini等多家AI服务
 - 🎮 **友好的界面**：美观的棋盘界面、实时游戏状态和历史记录
 - 🛠️ **灵活的设置**：可自定义玩家ID、选择AI模型和配置API
-- 🌐 **本地AI逻辑**：即使没有API密钥，也能与本地AI逻辑对战
+- 🌐 **本地AI逻辑**：内置电脑棋手，即使没有API密钥，也能享受棋牌对战
 - 🏆 **胜利庆祝**：有动画效果的胜利提示
+- ⚠️ **错误处理**：API错误自动降级到本地AI逻辑，确保游戏流畅进行
 
 ## 技术栈
 
@@ -32,6 +33,7 @@
   - 选择AI提供商（OpenAI、Anthropic、Deepseek等）
   - 选择AI模型
   - 输入您的API密钥
+- **电脑棋手**：选择"电脑棋手"，无需额外设置，使用内置AI算法
 
 ### 2. 开始游戏
 
@@ -43,7 +45,22 @@
 
 - **重新开始**：重置棋盘，开始新游戏
 - **返回设置**：回到游戏设置页面
-- **AI对战模式**：可以选择手动控制每一步，或开启自动对弈模式
+- **自动对弈模式**：在AI或电脑对战时可启用，进行自动对弈
+- **下一步按钮**：手动控制AI或电脑的每一步移动
+
+## API错误处理
+
+游戏对各种API错误情况进行了处理：
+- 无效的API密钥
+- API服务器不可用
+- AI返回无效移动
+- 网络连接问题
+
+当出现这些错误时，游戏会：
+1. 显示明确的错误消息提示
+2. 自动切换到本地AI算法
+3. 继续游戏流程而不中断
+4. 允许用户手动关闭错误通知
 
 ## 本地开发
 
@@ -74,20 +91,19 @@ npm run dev
 
 1. 添加部署配置：
 
-首先，在项目根目录下新建 `next.config.js` 文件（或更新现有文件）：
+在项目根目录下更新 `next.config.js` 文件：
 
 ```javascript
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',  // 启用静态导出
-  basePath: process.env.NODE_ENV === 'production' ? '/Web_Gobang' : '',
-  images: {
-    unoptimized: true,
-  },
-  // 禁用API路由的静态生成
-  experimental: {
-    appDir: true,
-  },
+  // 根据环境选择静态导出配置
+  ...(process.env.NODE_ENV === 'production' ? {
+    output: 'export',  // 启用静态导出
+    basePath: '/Web_Gobang', // 设置基本路径
+    images: {
+      unoptimized: true,
+    }
+  } : {})
 };
 
 module.exports = nextConfig;
@@ -102,7 +118,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   workflow_dispatch:
 
 permissions:
@@ -115,9 +131,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: "18"
           cache: 'npm'
@@ -126,7 +142,7 @@ jobs:
       - name: Build with Next.js
         run: npm run build
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v2
+        uses: actions/upload-pages-artifact@v3
         with:
           path: ./out
 
@@ -139,15 +155,15 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v2
+        uses: actions/deploy-pages@v4
 ```
 
 3. 在GitHub仓库设置中启用GitHub Pages：
 
    - 前往您的GitHub仓库
    - 点击 "Settings" 选项卡
-   - 滚动到 "GitHub Pages" 部分
-   - 在 "Source" 下拉菜单中选择 "GitHub Actions"
+   - 在左侧菜单找到 "Pages" 部分
+   - 在 "Source" 下选择 "GitHub Actions"
 
 4. 推送代码到GitHub：
 
