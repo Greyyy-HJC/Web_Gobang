@@ -1,0 +1,45 @@
+// ShipFast Online Gobang .cursorrules
+
+// ShipFast best practices
+const shipFastBestPractices = [
+  "Use Next.js App Router for routing and SSR",
+  "Favor React Server Components for performance; limit 'use client' usage",
+  "Wrap dynamic client components in Suspense for non-critical parts",
+  "Follow functional and declarative programming patterns",
+  "Optimize Web Vitals (LCP, CLS, FID)",
+  "Utilize Tailwind CSS and DaisyUi for a responsive, modern UI",
+  "Implement NextAuth for secure authentication when needed",
+  "Leverage MongoDB with Mongoose for scalable data management",
+  "Modularize components to avoid code duplication",
+  "Ensure robust error handling and input validation on API endpoints"
+];
+
+// Folder structure
+const folderStructure = `
+app/
+  layout.js
+  page.js
+  api/
+    gobang/   
+      route.js
+  components/
+    GameBoard.jsx
+    ApiKeyInput.jsx
+    AiMatchSetup.jsx
+lib/
+  db.js
+styles/
+  globals.css
+`;
+
+// Additional instructions
+const additionalInstructions = `
+1. Develop a clean and responsive UI using Tailwind CSS and DaisyUi.
+2. Allow users to input an API key to play against a specified AI model.
+3. Support dual API key input for AI vs AI matches.
+4. Secure API endpoints and user data with NextAuth integration.
+5. Use server components for core game logic and data fetching.
+6. Implement real-time game updates and intuitive state management.
+7. Prioritize performance, accessibility, and mobile-first design.
+8. Ensure the game is consistently referred to as "Gobang" throughout the project.
+`;
