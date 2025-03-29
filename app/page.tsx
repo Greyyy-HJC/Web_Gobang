@@ -10,6 +10,8 @@ type GameModeSetting = {
 };
 
 type Provider = 'OpenAI' | 'Anthropic' | 'Deepseek' | 'Qwen' | 'Gemini' | 'Custom';
+type ComputerAlgorithm = 'SimpleEval' | 'NeuralNetwork';
+type Difficulty = 'easy' | 'medium' | 'hard';
 
 interface ProviderConfig {
   name: Provider;
@@ -17,7 +19,35 @@ interface ProviderConfig {
   models: string[];
 }
 
+interface ApiConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+  isAI: boolean;
+  provider: Provider;
+  computerAlgorithm?: ComputerAlgorithm;
+  difficulty?: Difficulty;
+}
+
 export default function Home() {
+  // 电脑棋手算法选项
+  const [computerAlgorithms] = useState<{name: ComputerAlgorithm, description: string}[]>([
+    { 
+      name: 'SimpleEval', 
+      description: '启发式评估算法，速度快且策略灵活，会根据不同难度调整棋力'
+    },
+    { 
+      name: 'NeuralNetwork', 
+      description: '使用预训练的神经网络模型快速评估棋局，在复杂局面中表现更好'
+    }
+  ]);
+  
+  const [blackComputerAlgorithm, setBlackComputerAlgorithm] = useState<ComputerAlgorithm>('SimpleEval');
+  const [whiteComputerAlgorithm, setWhiteComputerAlgorithm] = useState<ComputerAlgorithm>('SimpleEval');
+  
+  const [blackDifficulty, setBlackDifficulty] = useState<Difficulty>('medium');
+  const [whiteDifficulty, setWhiteDifficulty] = useState<Difficulty>('medium');
+
   // 检测是否在静态环境中
   const [isStaticEnv, setIsStaticEnv] = useState(false);
   
@@ -71,8 +101,24 @@ export default function Home() {
   const [whitePlayerId, setWhitePlayerId] = useState('白方玩家');
   
   // API配置
-  const [blackApiKey, setBlackApiKey] = useState('');
-  const [whiteApiKey, setWhiteApiKey] = useState('');
+  const [blackApiConfig, setBlackApiConfig] = useState<ApiConfig>({
+    apiKey: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-3.5-turbo',
+    isAI: false,
+    provider: 'OpenAI',
+    computerAlgorithm: 'SimpleEval',
+    difficulty: 'medium'
+  });
+  const [whiteApiConfig, setWhiteApiConfig] = useState<ApiConfig>({
+    apiKey: '',
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-3.5-turbo',
+    isAI: false,
+    provider: 'OpenAI',
+    computerAlgorithm: 'SimpleEval',
+    difficulty: 'medium'
+  });
   const [blackProvider, setBlackProvider] = useState<Provider>('OpenAI');
   const [whiteProvider, setWhiteProvider] = useState<Provider>('OpenAI');
   const [blackCustomBaseUrl, setBlackCustomBaseUrl] = useState('');
@@ -104,6 +150,13 @@ export default function Home() {
   // 用于控制AI vs AI模式下的手动落子
   const [autoPlay, setAutoPlay] = useState(false);
   
+  // 添加禁手设置
+  const [forbiddenRules, setForbiddenRules] = useState({
+    overline: false, // 长连禁手（五子以上）
+    doubleFour: false, // 双四禁手
+    doubleThree: false, // 双三禁手
+  });
+
   // 根据选择的提供商获取配置
   const getProviderConfig = (provider: Provider): ProviderConfig => {
     return providers.find(p => p.name === provider) || providers[0];
@@ -144,11 +197,11 @@ export default function Home() {
     // 只在非静态环境下验证API设置
     if (!isStaticEnv) {
       // 验证输入
-      if (gameModeSetting.black === 'ai' && !blackApiKey) {
+      if (gameModeSetting.black === 'ai' && !blackApiConfig.apiKey) {
         // 不直接阻止游戏启动，在API调用时会显示错误
         console.warn('警告：黑方AI缺少API密钥，可能导致API调用失败');
       }
-      if (gameModeSetting.white === 'ai' && !whiteApiKey) {
+      if (gameModeSetting.white === 'ai' && !whiteApiConfig.apiKey) {
         console.warn('警告：白方AI缺少API密钥，可能导致API调用失败');
       }
       
@@ -172,12 +225,16 @@ export default function Home() {
     const setProvider = isBlack ? setBlackProvider : setWhiteProvider;
     const customBaseUrl = isBlack ? blackCustomBaseUrl : whiteCustomBaseUrl;
     const setCustomBaseUrl = isBlack ? setBlackCustomBaseUrl : setWhiteCustomBaseUrl;
-    const apiKey = isBlack ? blackApiKey : whiteApiKey;
-    const setApiKey = isBlack ? setBlackApiKey : setWhiteApiKey;
+    const apiConfig = isBlack ? blackApiConfig : whiteApiConfig;
+    const setApiConfig = isBlack ? setBlackApiConfig : setWhiteApiConfig;
     const model = isBlack ? blackModel : whiteModel;
     const setModel = isBlack ? setBlackModel : setWhiteModel;
     const playerId = isBlack ? blackPlayerId : whitePlayerId;
     const setPlayerId = isBlack ? setBlackPlayerId : setWhitePlayerId;
+    const computerAlgorithm = isBlack ? blackComputerAlgorithm : whiteComputerAlgorithm;
+    const setComputerAlgorithm = isBlack ? setBlackComputerAlgorithm : setWhiteComputerAlgorithm;
+    const difficulty = isBlack ? blackDifficulty : whiteDifficulty;
+    const setDifficulty = isBlack ? setBlackDifficulty : setWhiteDifficulty;
     
     return (
       <div className="col-span-2 md:col-span-1 p-4 border rounded-lg bg-base-200">
@@ -223,9 +280,60 @@ export default function Home() {
             />
           </div>
         ) : playerType === 'computer' ? (
-          <div className="mt-3 p-3 bg-info bg-opacity-10 rounded-md">
-            <p className="text-sm">电脑棋手使用本地AI算法，无需额外设置。</p>
-          </div>
+          <>
+            <div className="form-control mt-3">
+              <label className="label">
+                <span className="label-text font-medium">电脑算法</span>
+              </label>
+              <select
+                className="select select-bordered w-full"
+                value={computerAlgorithm}
+                onChange={(e) => {
+                  const algo = e.target.value as ComputerAlgorithm;
+                  setComputerAlgorithm(algo);
+                  if (side === 'black') {
+                    handleBlackApiChange('computerAlgorithm', algo);
+                  } else {
+                    handleWhiteApiChange('computerAlgorithm', algo);
+                  }
+                }}
+              >
+                {computerAlgorithms.map(algo => (
+                  <option key={`${side}-${algo.name}`} value={algo.name}>{algo.name}</option>
+                ))}
+              </select>
+              <div className="text-xs text-info mt-1">
+                {computerAlgorithms.find(algo => algo.name === computerAlgorithm)?.description}
+              </div>
+            </div>
+            
+            <div className="form-control mt-3">
+              <label className="label">
+                <span className="label-text font-medium">难度级别</span>
+              </label>
+              <select
+                className="select select-bordered w-full"
+                value={difficulty}
+                onChange={(e) => {
+                  const diff = e.target.value as Difficulty;
+                  setDifficulty(diff);
+                  if (side === 'black') {
+                    handleBlackApiChange('difficulty', diff);
+                  } else {
+                    handleWhiteApiChange('difficulty', diff);
+                  }
+                }}
+              >
+                <option value="easy">简单</option>
+                <option value="medium">中等</option>
+                <option value="hard">困难</option>
+              </select>
+            </div>
+            
+            <div className="mt-3 p-3 bg-info bg-opacity-10 rounded-md">
+              <p className="text-sm">电脑棋手使用本地算法，可在任何环境下运行（包括静态部署）</p>
+            </div>
+          </>
         ) : (
           <>
             <div className="form-control mt-3">
@@ -235,12 +343,19 @@ export default function Home() {
               <select
                 className="select select-bordered w-full"
                 value={provider}
-                onChange={(e) => setProvider(e.target.value as Provider)}
+                onChange={(e) => {
+                  setProvider(e.target.value as Provider);
+                }}
                 disabled={isStaticEnv}
               >
-                {providers.map(p => (
-                  <option key={`${side}-${p.name}`} value={p.name}>{p.name}</option>
-                ))}
+                <optgroup label="大语言模型">
+                  <option value="OpenAI">OpenAI</option>
+                  <option value="Anthropic">Anthropic</option>
+                  <option value="Deepseek">Deepseek</option>
+                  <option value="Qwen">Qwen</option>
+                  <option value="Gemini">Gemini</option>
+                </optgroup>
+                <option value="Custom">Custom</option>
               </select>
             </div>
             
@@ -262,20 +377,6 @@ export default function Home() {
             
             <div className="form-control mt-3">
               <label className="label">
-                <span className="label-text font-medium">API密钥</span>
-              </label>
-              <input
-                type="password"
-                className="input input-bordered w-full"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="输入API密钥"
-                disabled={isStaticEnv}
-              />
-            </div>
-            
-            <div className="form-control mt-3">
-              <label className="label">
                 <span className="label-text font-medium">选择模型</span>
               </label>
               <select
@@ -290,56 +391,144 @@ export default function Home() {
               </select>
             </div>
             
-            <div className="form-control mt-3">
-              <label className="label">
-                <span className="label-text font-medium">策略设置</span>
-              </label>
-              <select
-                className="select select-bordered w-full"
-                value={side === 'black' ? blackPromptType : whitePromptType}
-                onChange={(e) => {
-                  if (side === 'black') {
-                    setBlackPromptType(e.target.value as 'default' | 'custom');
-                  } else {
-                    setWhitePromptType(e.target.value as 'default' | 'custom');
-                  }
-                }}
-                disabled={isStaticEnv}
-              >
-                <option value="default">默认策略</option>
-                <option value="custom">自定义策略</option>
-              </select>
-            </div>
-            
-            {((side === 'black' && blackPromptType === 'custom') || 
-              (side === 'white' && whitePromptType === 'custom')) && (
+            {/* API密钥输入框，仅对需要API密钥的提供商显示 */}
+            {!['AlphaZero', 'Minimax', 'MCTS'].includes(provider) && (
               <div className="form-control mt-3">
                 <label className="label">
-                  <span className="label-text font-medium">自定义AI策略</span>
+                  <span className="label-text font-medium">API密钥</span>
                 </label>
-                <textarea
-                  className="textarea textarea-bordered w-full"
-                  rows={5}
-                  value={side === 'black' ? blackCustomPrompt : whiteCustomPrompt}
+                <input
+                  type="password"
+                  className="input input-bordered w-full"
+                  value={apiConfig.apiKey}
                   onChange={(e) => {
+                    const newApiKey = e.target.value;
                     if (side === 'black') {
-                      setBlackCustomPrompt(e.target.value);
+                      handleBlackApiChange('apiKey', newApiKey);
                     } else {
-                      setWhiteCustomPrompt(e.target.value);
+                      handleWhiteApiChange('apiKey', newApiKey);
                     }
                   }}
-                  placeholder="请输入自定义的落子策略优先级列表。这将替换默认策略部分，其他提示词保持不变。"
+                  placeholder="输入API密钥"
                   disabled={isStaticEnv}
                 />
-                <label className="label">
-                  <span className="label-text-alt text-info">提示：只需输入策略内容，无需包含棋盘描述和JSON返回格式说明。系统会自动处理这些部分。</span>
-                </label>
               </div>
+            )}
+            
+            {/* 策略设置，仅对非专用棋类引擎显示 */}
+            {!['AlphaZero', 'Minimax', 'MCTS'].includes(provider) && (
+              <>
+                <div className="form-control mt-3">
+                  <label className="label">
+                    <span className="label-text font-medium">策略设置</span>
+                  </label>
+                  <select
+                    className="select select-bordered w-full"
+                    value={side === 'black' ? blackPromptType : whitePromptType}
+                    onChange={(e) => {
+                      if (side === 'black') {
+                        setBlackPromptType(e.target.value as 'default' | 'custom');
+                      } else {
+                        setWhitePromptType(e.target.value as 'default' | 'custom');
+                      }
+                    }}
+                    disabled={isStaticEnv}
+                  >
+                    <option value="default">默认策略</option>
+                    <option value="custom">自定义策略</option>
+                  </select>
+                </div>
+                
+                {((side === 'black' && blackPromptType === 'custom') || 
+                  (side === 'white' && whitePromptType === 'custom')) && (
+                  <div className="form-control mt-3">
+                    <label className="label">
+                      <span className="label-text font-medium">自定义AI策略</span>
+                    </label>
+                    <textarea
+                      className="textarea textarea-bordered w-full"
+                      rows={5}
+                      value={side === 'black' ? blackCustomPrompt : whiteCustomPrompt}
+                      onChange={(e) => {
+                        if (side === 'black') {
+                          setBlackCustomPrompt(e.target.value);
+                        } else {
+                          setWhiteCustomPrompt(e.target.value);
+                        }
+                      }}
+                      placeholder="请输入自定义的落子策略优先级列表。这将替换默认策略部分，其他提示词保持不变。"
+                      disabled={isStaticEnv}
+                    />
+                    <label className="label">
+                      <span className="label-text-alt text-info">提示：只需输入策略内容，无需包含棋盘描述和JSON返回格式说明。系统会自动处理这些部分。</span>
+                    </label>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
       </div>
     );
+  };
+
+  // 修改黑棋API配置处理函数
+  const handleBlackApiChange = (
+    field: 'apiKey' | 'baseUrl' | 'model' | 'isAI' | 'computerAlgorithm' | 'difficulty',
+    value: string | boolean | ComputerAlgorithm | Difficulty
+  ) => {
+    setBlackApiConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // 修改白棋API配置处理函数
+  const handleWhiteApiChange = (
+    field: 'apiKey' | 'baseUrl' | 'model' | 'isAI' | 'computerAlgorithm' | 'difficulty',
+    value: string | boolean | ComputerAlgorithm | Difficulty
+  ) => {
+    setWhiteApiConfig(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // 更新处理AI类型选择的函数
+  const handleBlackPlayerTypeChange = (type: string) => {
+    setGameModeSetting({
+      ...gameModeSetting,
+      black: type as PlayerType
+    });
+    
+    // 如果选择了AI类型，设置isAI为true
+    if (type === 'ai') {
+      handleBlackApiChange('isAI', true);
+    } else {
+      handleBlackApiChange('isAI', false);
+    }
+  };
+  
+  const handleWhitePlayerTypeChange = (type: string) => {
+    setGameModeSetting({
+      ...gameModeSetting,
+      white: type as PlayerType
+    });
+    
+    // 如果选择了AI类型，设置isAI为true
+    if (type === 'ai') {
+      handleWhiteApiChange('isAI', true);
+    } else {
+      handleWhiteApiChange('isAI', false);
+    }
+  };
+
+  // 处理禁手设置更改
+  const handleForbiddenRuleChange = (rule: keyof typeof forbiddenRules, checked: boolean) => {
+    setForbiddenRules(prev => ({
+      ...prev,
+      [rule]: checked
+    }));
   };
 
   return (
@@ -399,6 +588,42 @@ export default function Home() {
               </div>
             )}
 
+            <h2 className="text-xl font-bold mt-6 mb-3">禁手规则</h2>
+            <div className="flex justify-between items-center my-4">
+              <div className="form-control flex-row items-center">
+                <span className="font-medium mr-2 tooltip" data-tip="黑棋不能形成连续六子或更多子的连线">长连禁手 (≥6子)</span>
+                <input 
+                  type="checkbox" 
+                  className="toggle toggle-primary" 
+                  checked={forbiddenRules.overline}
+                  onChange={(e) => handleForbiddenRuleChange('overline', e.target.checked)}
+                />
+              </div>
+              <div className="form-control flex-row items-center">
+                <span className="font-medium mr-2 tooltip" data-tip="黑棋一步棋不能同时形成两个活四">双四禁手</span>
+                <input 
+                  type="checkbox" 
+                  className="toggle toggle-primary" 
+                  checked={forbiddenRules.doubleFour}
+                  onChange={(e) => handleForbiddenRuleChange('doubleFour', e.target.checked)}
+                />
+              </div>
+              <div className="form-control flex-row items-center">
+                <span className="font-medium mr-2 tooltip" data-tip="黑棋一步棋不能同时形成两个活三">双三禁手</span>
+                <input 
+                  type="checkbox" 
+                  className="toggle toggle-primary" 
+                  checked={forbiddenRules.doubleThree}
+                  onChange={(e) => handleForbiddenRuleChange('doubleThree', e.target.checked)}
+                />
+              </div>
+            </div>
+            <div className="mt-2 p-3 bg-base-200 rounded-md text-sm">
+              <p className="font-medium">注意：</p>
+              <p>以上禁手规则仅适用于黑棋。白棋无禁手限制。</p>
+              <p>启用禁手规则可以平衡黑棋先行的优势，是标准的五子棋比赛规则。</p>
+            </div>
+
             <button
               className="btn btn-primary w-full mt-6 text-lg"
               onClick={handleStartGame}
@@ -421,14 +646,22 @@ export default function Home() {
               blackPlayer={gameModeSetting.black}
               whitePlayer={gameModeSetting.white}
               blackApiConfig={{
-                apiKey: blackApiKey,
+                apiKey: blackApiConfig.apiKey,
                 baseUrl: blackProvider === 'Custom' ? blackCustomBaseUrl : getProviderConfig(blackProvider).baseUrl,
-                model: blackModel
+                model: blackModel,
+                isAI: blackApiConfig.isAI,
+                provider: blackProvider,
+                computerAlgorithm: blackComputerAlgorithm,
+                difficulty: blackDifficulty
               }}
               whiteApiConfig={{
-                apiKey: whiteApiKey,
+                apiKey: whiteApiConfig.apiKey,
                 baseUrl: whiteProvider === 'Custom' ? whiteCustomBaseUrl : getProviderConfig(whiteProvider).baseUrl,
-                model: whiteModel
+                model: whiteModel,
+                isAI: whiteApiConfig.isAI,
+                provider: whiteProvider,
+                computerAlgorithm: whiteComputerAlgorithm,
+                difficulty: whiteDifficulty
               }}
               blackPlayerId={blackPlayerId}
               whitePlayerId={whitePlayerId}
@@ -437,6 +670,7 @@ export default function Home() {
               blackCustomPrompt={blackCustomPrompt}
               whiteCustomPrompt={whiteCustomPrompt}
               autoPlay={autoPlay}
+              forbiddenRules={forbiddenRules}
               onReturnToSettings={() => setGameStarted(false)}
             />
           </div>

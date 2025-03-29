@@ -4,11 +4,22 @@ import { useState, useEffect, useCallback } from 'react';
 
 type Cell = 'black' | 'white' | null;
 type PlayerType = 'human' | 'ai' | 'computer';
+type ComputerAlgorithm = 'SimpleEval' | 'NeuralNetwork';
 
 interface ApiConfig {
   apiKey: string;
   baseUrl: string;
   model: string;
+  isAI: boolean;
+  provider: string;
+  computerAlgorithm?: ComputerAlgorithm; // 为电脑棋手添加算法选择
+  difficulty?: 'easy' | 'medium' | 'hard'; // 添加难度选择
+}
+
+interface ForbiddenRules {
+  overline: boolean; // 长连禁手（五子以上）
+  doubleFour: boolean; // 双四禁手
+  doubleThree: boolean; // 双三禁手
 }
 
 interface GameBoardProps {
@@ -24,6 +35,7 @@ interface GameBoardProps {
   whiteCustomPrompt?: string;
   autoPlay: boolean;
   onReturnToSettings?: () => void;
+  forbiddenRules: ForbiddenRules;
 }
 
 // 客户端AI逻辑函数
@@ -297,6 +309,478 @@ function findBestMoveClient(board: Cell[][], currentPlayer: 'black' | 'white'): 
   return bestMove;
 }
 
+// 判断当前是否处于静态环境（无法访问API）
+const isStaticEnvironment = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  
+  return (
+    window.location.hostname.includes('github.io') ||
+    window.location.pathname.includes('/Web_Gobang') ||
+    window.location.protocol === 'file:' ||
+    process.env.NODE_ENV === 'production'
+  );
+};
+
+// ===================== 电脑棋手增强算法实现 =====================
+
+// 增强版简单算法，根据难度调整策略
+function findEnhancedSimpleMove(board: Cell[][], player: 'black' | 'white', difficulty: 'easy' | 'medium' | 'hard'): { row: number, col: number } | null {
+  // 获取对手颜色
+  const opponent = player === 'black' ? 'white' : 'black';
+  
+  // 建立所有可能的移动以及它们的评分
+  const possibleMoves: { row: number; col: number; score: number }[] = [];
+  
+  // 检查是否有活四/冲四
+  let hasOpenFour = false;
+  let hasBlockingMove = false;
+  
+  // 首先扫描并检测高价值移动
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] !== null) continue;
+      
+      // 创建临时状态
+      board[row][col] = player;
+      
+      // 检查四子连线（己方）
+      if (wouldFormOpenFourClient(board, row, col, player)) {
+        hasOpenFour = true;
+      }
+      
+      // 检查四子连线（对手）
+      if (wouldFormOpenFourClient(board, row, col, opponent)) {
+        hasBlockingMove = true;
+      }
+      
+      // 恢复棋盘
+      board[row][col] = null;
+    }
+  }
+  
+  // 收集所有可能的移动并计算它们的评分
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] !== null) continue;
+      
+      let score = evaluatePositionClient(board, row, col, player);
+      
+      // 根据难度调整分数
+      switch (difficulty) {
+        case 'easy':
+          // 容易模式下:
+          // 1. 计算机会有20%的几率做出次优的选择
+          // 2. 不会太关注对手的威胁
+          // 3. 偏好随机走子
+          if (Math.random() < 0.2) {
+            score = score * 0.5; // 降低分数
+          }
+          
+          // 降低防守权重
+          if (wouldFormOpenFourClient(board, row, col, opponent) ||
+              wouldFormOpenThreeClient(board, row, col, opponent)) {
+            score = score * 0.7; // 降低防守的优先级
+          }
+          
+          // 添加更多随机性
+          score += Math.random() * 500;
+          break;
+          
+        case 'medium':
+          // 中等模式下:
+          // 1. 平衡进攻和防守
+          // 2. 较少随机性
+          if (wouldFormOpenFourClient(board, row, col, player)) {
+            score += 1000; // 提高己方活四权重
+          }
+          if (wouldFormOpenThreeClient(board, row, col, player)) {
+            score += 500; // 提高己方活三权重
+          }
+          
+          // 添加适度随机性
+          score += Math.random() * 200;
+          break;
+          
+        case 'hard':
+          // 困难模式下:
+          // 1. 优先进攻和防守关键位置
+          // 2. 几乎没有随机性
+          // 3. 拥有更强的战略意识
+          if (wouldFormOpenFourClient(board, row, col, player)) {
+            score += 2000; // 大幅提高己方活四权重
+          }
+          if (wouldFormOpenThreeClient(board, row, col, player)) {
+            score += 1000; // 大幅提高己方活三权重
+          }
+          if (wouldFormOpenFourClient(board, row, col, opponent)) {
+            score += 1800; // 大幅提高防守对手活四的权重
+          }
+          if (wouldFormOpenThreeClient(board, row, col, opponent)) {
+            score += 900; // 大幅提高防守对手活三的权重
+          }
+          
+          // 中心位置更加重要
+          score += getPositionValueClient(row, col) * 5;
+          
+          // 非常低的随机性
+          score += Math.random() * 50;
+          break;
+      }
+      
+      possibleMoves.push({ row, col, score });
+    }
+  }
+  
+  // 特殊情况：如果没有可行的移动，返回第一个空位置
+  if (possibleMoves.length === 0) {
+    for (let row = 0; row < 19; row++) {
+      for (let col = 0; col < 19; col++) {
+        if (board[row][col] === null) {
+          return { row, col };
+        }
+      }
+    }
+    return null;
+  }
+  
+  // 排序移动（根据评分从高到低）
+  possibleMoves.sort((a, b) => b.score - a.score);
+  
+  // 返回最佳的移动
+  return { row: possibleMoves[0].row, col: possibleMoves[0].col };
+}
+
+// 简单的神经网络模型（预先设定权重，没有实际训练过程）
+function neuralNetworkComputer(board: Cell[][], player: 'black' | 'white'): { row: number, col: number } | null {
+  // 这是一个简化的神经网络评估函数，实际中可能需要真正的模型
+  // 检查立即获胜与防御
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === null) {
+        // 检查是否为获胜着法
+        board[row][col] = player;
+        if (checkWinningMove(board, row, col)) {
+          board[row][col] = null;
+          return { row, col };
+        }
+        board[row][col] = null;
+        
+        // 检查是否需要防守
+        const opponent = player === 'black' ? 'white' : 'black';
+        board[row][col] = opponent;
+        if (checkWinningMove(board, row, col)) {
+          board[row][col] = null;
+          return { row, col };
+        }
+        board[row][col] = null;
+      }
+    }
+  }
+  
+  // 生成所有候选移动
+  const candidates: { row: number, col: number, score: number }[] = [];
+  
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === null && hasNeighbor(board, row, col, 2)) {
+        // 计算神经网络风格的特征
+        const features = extractFeatures(board, row, col, player);
+        const score = evaluateWithNeuralNetwork(features);
+        
+        candidates.push({ row, col, score });
+      }
+    }
+  }
+  
+  // 如果没有候选移动
+  if (candidates.length === 0) {
+    return findFirstEmptyCell(board);
+  }
+  
+  // 按分数排序并选择最高分
+  candidates.sort((a, b) => b.score - a.score);
+  return { row: candidates[0].row, col: candidates[0].col };
+  
+  // 提取简化的神经网络特征
+  function extractFeatures(board: Cell[][], row: number, col: number, player: 'black' | 'white'): number[] {
+    const features = [];
+    const opponent = player === 'black' ? 'white' : 'black';
+    
+    // 临时模拟落子
+    board[row][col] = player;
+    
+    // 特征1：中心距离（归一化）
+    const centerDistance = Math.sqrt(Math.pow(row - 9, 2) + Math.pow(col - 9, 2)) / 12.73;
+    features.push(1 - centerDistance); // 距离中心越近越好
+    
+    // 特征2-5：四个方向上的连子数量
+    const directions = [
+      [[0, 1], [0, -1]],  // 水平
+      [[1, 0], [-1, 0]],  // 垂直
+      [[1, 1], [-1, -1]], // 对角线
+      [[1, -1], [-1, 1]]  // 反对角线
+    ];
+    
+    for (const direction of directions) {
+      let count = 1; // 当前位置
+      
+      for (const [dx, dy] of direction) {
+        let x = row + dx;
+        let y = col + dy;
+        
+        while (x >= 0 && x < 19 && y >= 0 && y < 19 && board[x][y] === player) {
+          count++;
+          x += dx;
+          y += dy;
+        }
+      }
+      
+      features.push(count / 5); // 归一化为0-1
+    }
+    
+    // 特征6-9：四个方向上的对手连子阻断
+    for (const direction of directions) {
+      let blocked = 0;
+      
+      for (const [dx, dy] of direction) {
+        let x = row + dx;
+        let y = col + dy;
+        
+        let opponentCount = 0;
+        while (x >= 0 && x < 19 && y >= 0 && y < 19 && board[x][y] === opponent) {
+          opponentCount++;
+          x += dx;
+          y += dy;
+        }
+        
+        if (opponentCount > 0) {
+          blocked++;
+        }
+      }
+      
+      features.push(blocked / 2); // 归一化为0-1
+    }
+    
+    // 撤销落子
+    board[row][col] = null;
+    
+    return features;
+  }
+  
+  // 简单的前馈神经网络计算（使用预定义权重）
+  function evaluateWithNeuralNetwork(features: number[]): number {
+    // 预定义的隐层权重（实际应用中这些应该通过训练获得）
+    const hiddenWeights = [
+      [0.5, 0.8, 0.6, 0.7, 0.9, 0.4, 0.3, 0.5, 0.2],
+      [0.6, 0.7, 0.5, 0.8, 0.6, 0.3, 0.2, 0.4, 0.3],
+      [0.7, 0.5, 0.8, 0.6, 0.7, 0.5, 0.4, 0.2, 0.5],
+      [0.8, 0.6, 0.7, 0.5, 0.8, 0.6, 0.5, 0.3, 0.4],
+      [0.4, 0.9, 0.4, 0.9, 0.5, 0.7, 0.6, 0.4, 0.5]
+    ];
+    
+    // 输出层权重
+    const outputWeights = [0.9, 0.8, 0.7, 0.6, 0.5];
+    
+    // 计算隐藏层
+    const hidden = hiddenWeights.map(weights => {
+      let sum = 0;
+      for (let i = 0; i < features.length; i++) {
+        sum += features[i] * weights[i];
+      }
+      return Math.tanh(sum); // 激活函数
+    });
+    
+    // 计算输出
+    let output = 0;
+    for (let i = 0; i < hidden.length; i++) {
+      output += hidden[i] * outputWeights[i];
+    }
+    
+    return Math.tanh(output) * 100; // 缩放到合理范围
+  }
+}
+
+// 辅助函数：检查位置周围是否有棋子
+function hasNeighbor(board: Cell[][], row: number, col: number, distance: number = 1): boolean {
+  for (let dr = -distance; dr <= distance; dr++) {
+    for (let dc = -distance; dc <= distance; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      
+      const r = row + dr;
+      const c = col + dc;
+      
+      if (r >= 0 && r < 19 && c >= 0 && c < 19 && board[r][c] !== null) {
+        return true;
+      }
+    }
+  }
+  
+  return false;
+}
+
+// 辅助函数：查找第一个空位置
+function findFirstEmptyCell(board: Cell[][]): { row: number, col: number } | null {
+  const center = 9;
+  
+  // 先检查中心位置
+  if (board[center][center] === null) {
+    return { row: center, col: center };
+  }
+  
+  // 从中心向外螺旋查找
+  const spiral = [
+    [0, 0], [-1, 0], [-1, 1], [0, 1], [1, 1], 
+    [1, 0], [1, -1], [0, -1], [-1, -1], [-2, 0],
+    [-2, 1], [-2, 2], [-1, 2], [0, 2], [1, 2], 
+    [2, 2], [2, 1], [2, 0], [2, -1], [2, -2]
+  ];
+  
+  for (const [dx, dy] of spiral) {
+    const r = center + dx;
+    const c = center + dy;
+    if (r >= 0 && r < 19 && c >= 0 && c < 19 && board[r][c] === null) {
+      return { row: r, col: c };
+    }
+  }
+  
+  // 如果螺旋查找失败，扫描整个棋盘
+  for (let r = 0; r < 19; r++) {
+    for (let c = 0; c < 19; c++) {
+      if (board[r][c] === null) {
+        return { row: r, col: c };
+      }
+    }
+  }
+  
+  return null; // 棋盘已满
+}
+
+// 辅助函数：评估整个棋盘的分数（针对Minimax）
+function evaluateBoard(board: Cell[][], player: 'black' | 'white'): number {
+  let score = 0;
+  const opponent = player === 'black' ? 'white' : 'black';
+  
+  // 检查全部位置的分数
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === player) {
+        score += evaluatePositionClient(board, row, col, player);
+      } else if (board[row][col] === opponent) {
+        score -= evaluatePositionClient(board, row, col, opponent);
+      }
+    }
+  }
+  
+  return score;
+}
+
+// 辅助函数：检查是否是获胜的移动
+function checkWinningMove(board: Cell[][], row: number, col: number): boolean {
+  if (board[row][col] === null) return false;
+  
+  const directions = [
+    [0, 1],  // 水平
+    [1, 0],  // 垂直
+    [1, 1],  // 对角线
+    [1, -1]  // 反对角线
+  ];
+  
+  for (const [dx, dy] of directions) {
+    let count = 1;
+    
+    // 正方向检查
+    for (let i = 1; i < 5; i++) {
+      const r = row + dx * i;
+      const c = col + dy * i;
+      
+      if (r < 0 || r >= 19 || c < 0 || c >= 19 || board[r][c] !== board[row][col]) {
+        break;
+      }
+      
+      count++;
+    }
+    
+    // 反方向检查
+    for (let i = 1; i < 5; i++) {
+      const r = row - dx * i;
+      const c = col - dy * i;
+      
+      if (r < 0 || r >= 19 || c < 0 || c >= 19 || board[r][c] !== board[row][col]) {
+        break;
+      }
+      
+      count++;
+    }
+    
+    if (count >= 5) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// 主要函数：根据选择的算法和难度选择计算机移动
+function findComputerMove(
+  board: Cell[][], 
+  player: 'black' | 'white', 
+  algorithm: ComputerAlgorithm, 
+  difficulty: 'easy' | 'medium' | 'hard'
+): { row: number, col: number } | null {
+  // 快速检查是否有立即获胜的着法
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === null) {
+        board[row][col] = player;
+        if (checkWinningMove(board, row, col)) {
+          board[row][col] = null;
+          return { row, col };
+        }
+        board[row][col] = null;
+      }
+    }
+  }
+  
+  // 快速检查是否有立即需要阻止的着法
+  const opponent = player === 'black' ? 'white' : 'black';
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === null) {
+        board[row][col] = opponent;
+        if (checkWinningMove(board, row, col)) {
+          board[row][col] = null;
+          return { row, col };
+        }
+        board[row][col] = null;
+      }
+    }
+  }
+  
+  // 根据算法选择计算机移动
+  switch (algorithm) {
+    case 'SimpleEval':
+      // 基于难度使用增强版简单算法
+      return findEnhancedSimpleMove(board, player, difficulty);
+      
+    case 'NeuralNetwork':
+      // 使用神经网络模型
+      try {
+        const nnResult = neuralNetworkComputer(board, player);
+        if (nnResult) {
+          return nnResult;
+        }
+      } catch (e) {
+        console.error("Neural Network error:", e);
+      }
+      // 如果神经网络失败，回退到简单算法
+      return findEnhancedSimpleMove(board, player, 'medium');
+      
+    default:
+      // 默认使用简单评估函数
+      return findEnhancedSimpleMove(board, player, 'medium');
+  }
+}
+
 export default function GameBoard({ 
   blackPlayer, 
   whitePlayer, 
@@ -309,7 +793,8 @@ export default function GameBoard({
   blackCustomPrompt,
   whiteCustomPrompt,
   autoPlay,
-  onReturnToSettings 
+  onReturnToSettings,
+  forbiddenRules
 }: GameBoardProps) {
   const [board, setBoard] = useState<Cell[][]>(Array(19).fill(null).map(() => Array(19).fill(null)));
   const [currentPlayer, setCurrentPlayer] = useState<'black' | 'white'>('black');
@@ -320,6 +805,9 @@ export default function GameBoard({
   const [moveHistory, setMoveHistory] = useState<{row: number, col: number, player: 'black' | 'white'}[]>([]);
   const [showVictoryModal, setShowVictoryModal] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [blackSessionId, setBlackSessionId] = useState<string | undefined>(undefined);
+  const [whiteSessionId, setWhiteSessionId] = useState<string | undefined>(undefined);
+  const [moveCount, setMoveCount] = useState<number>(0);
 
   const checkWinner = (row: number, col: number, player: 'black' | 'white'): boolean => {
     const directions = [
@@ -351,13 +839,20 @@ export default function GameBoard({
   };
 
   // 获取当前玩家的配置
-  const getCurrentPlayerConfig = () => {
+  const getCurrentPlayerConfig = (): ApiConfig => {
     return currentPlayer === 'black' ? blackApiConfig : whiteApiConfig;
   };
 
-  // 获取当前玩家的类型（人类或AI）
-  const getCurrentPlayerType = () => {
+  // 获取当前玩家类型
+  const getCurrentPlayerType = (): 'human' | 'ai' | 'computer' => {
     return currentPlayer === 'black' ? blackPlayer : whitePlayer;
+  };
+
+  // 确定玩家是否是AI（根据配置的API密钥判断）
+  const isCurrentPlayerAI = (): boolean => {
+    const playerType = getCurrentPlayerType();
+    const config = getCurrentPlayerConfig();
+    return playerType === 'ai' && config.isAI === true;
   };
 
   // 添加一个新的移动到棋盘和历史记录
@@ -377,130 +872,314 @@ export default function GameBoard({
     return false;
   };
 
-  // 使用 AI 进行移动
-  const makeAIMove = useCallback(async () => {
+  // 让AI下一步棋
+  const makeAIMove = async () => {
     if (isGameOver || isThinking) return;
-
+    
     setIsThinking(true);
+    setErrorMessage(null);
+    
     try {
-      const playerConfig = getCurrentPlayerConfig();
-      const playerType = getCurrentPlayerType();
+      // 获取当前玩家的配置
+      const apiConfig = getCurrentPlayerConfig();
+      const promptType = currentPlayer === 'black' ? blackPromptType : whitePromptType;
+      const customPrompt = currentPlayer === 'black' ? blackCustomPrompt : whiteCustomPrompt;
+      const sessionId = currentPlayer === 'black' ? blackSessionId : whiteSessionId;
       
-      // 验证API配置
-      if (playerType === 'ai' && (!playerConfig.apiKey || playerConfig.apiKey.trim() === '')) {
-        setErrorMessage("API密钥不能为空。将使用本地AI算法继续游戏。");
-        // 使用本地AI逻辑替代
-        await new Promise(resolve => setTimeout(resolve, 800));
-        const move = findBestMoveClient(board, currentPlayer);
-        if (move) {
-          const gameEnded = addMove(move.row, move.col, currentPlayer);
-          if (!gameEnded) {
-            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
-          }
-        }
-        setIsThinking(false);
-        return;
-      }
-      
-      // 判断是否使用本地AI逻辑的情况：
-      // 1. 是电脑棋手 (computer)
-      // 2. 在GitHub Pages上（hostname包含github.io）
-      // 3. 当前URL包含/Web_Gobang（说明在basePath配置的环境中）
-      // 4. 使用file:///协议访问（本地静态文件）
-      // 5. 生产环境
-      const isStaticEnv = typeof window !== 'undefined' && (
-        window.location.hostname.includes('github.io') ||
-        window.location.pathname.includes('/Web_Gobang') ||
-        window.location.protocol === 'file:' ||
-        process.env.NODE_ENV === 'production'
-      );
-      
-      if (playerType === 'computer' || isStaticEnv) {
-        // 使用本地AI逻辑
-        console.log("使用本地AI逻辑");
-        // 等待一下以模拟思考时间
-        await new Promise(resolve => setTimeout(resolve, 800));
-        const move = findBestMoveClient(board, currentPlayer);
-        if (move) {
-          const gameEnded = addMove(move.row, move.col, currentPlayer);
-          
-          if (!gameEnded) {
-            // 切换到下一个玩家
-            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
-          }
-        }
-      } else {
-        // 在开发环境中使用API
-        console.log("使用API路由");
-        const response = await fetch('/api/gobang/move', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            board,
-            apiKey: playerConfig.apiKey,
-            baseUrl: playerConfig.baseUrl,
-            model: playerConfig.model,
-            currentPlayer,
-            promptType: currentPlayer === 'black' ? blackPromptType : whitePromptType,
-            customPrompt: currentPlayer === 'black' ? blackCustomPrompt : whiteCustomPrompt
-          }),
-        });
-
-        const data = await response.json();
+      // 如果是"电脑棋手"，使用本地算法
+      if (getCurrentPlayerType() === 'computer') {
+        console.log('使用电脑棋手算法:', apiConfig.computerAlgorithm, '难度:', apiConfig.difficulty);
         
-        if (data.error) {
-          console.error('AI API返回错误:', data.error);
-          setErrorMessage(`AI API返回错误: ${data.error}。将使用本地AI算法继续游戏。`);
-          // 使用本地AI逻辑作为备选
-          const move = findBestMoveClient(board, currentPlayer);
-          if (move) {
+        // 使用选定的算法和难度计算下一步
+        const move = findComputerMove(
+          board, 
+          currentPlayer, 
+          apiConfig.computerAlgorithm || 'SimpleEval', 
+          apiConfig.difficulty || 'medium'
+        );
+        
+        if (move) {
+          setTimeout(() => {
             const gameEnded = addMove(move.row, move.col, currentPlayer);
             if (!gameEnded) {
               setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
             }
+            setIsThinking(false);
+            setMoveCount(prevCount => prevCount + 1);
+          }, 300); // 添加短暂延迟以提高用户体验
+          return;
+        } else {
+          setErrorMessage('电脑算法无法找到有效的落子位置');
+          setIsThinking(false);
+          return;
+        }
+      }
+      
+      // 如果是AI但没有设置API密钥，使用本地AI
+      if (apiConfig.isAI && !apiConfig.apiKey) {
+        setErrorMessage(`没有设置API密钥，使用本地AI算法`);
+        // 保存原始玩家
+        const currentPlayerBeforeMove = currentPlayer;
+        const move = findBestMoveClient(board, currentPlayer);
+        if (move) {
+          const gameEnded = addMove(move.row, move.col, currentPlayer);
+          if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+            // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
+            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
           }
+        }
+        setIsThinking(false);
+        setMoveCount(prevCount => prevCount + 1);
+        return;
+      }
+      
+      // 在静态环境中使用本地算法
+      if (isStaticEnvironment()) {
+        console.log('在静态环境中，使用本地AI算法');
+        setErrorMessage(`在静态部署环境中无法访问外部API，使用本地AI算法`);
+        // 保存原始玩家
+        const currentPlayerBeforeMove = currentPlayer;
+        const move = findBestMoveClient(board, currentPlayer);
+        if (move) {
+          const gameEnded = addMove(move.row, move.col, currentPlayer);
+          if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+            // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
+            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+          }
+        }
+        setIsThinking(false);
+        setMoveCount(prevCount => prevCount + 1);
+        return;
+      }
+      
+      // 常规API调用
+      // 设置重试次数和延迟
+      let retryAttempt = 0;
+      const maxRetries = 1;
+      
+      // 使用API发起请求，带重试逻辑
+      let response = await fetch('/api/gobang/move', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          board,
+          apiKey: apiConfig.apiKey,
+          baseUrl: apiConfig.baseUrl,
+          model: apiConfig.model,
+          currentPlayer,
+          promptType,
+          customPrompt,
+          sessionId,
+          moveNumber: moveCount + 1,
+          forbiddenRules: currentPlayer === 'black' ? forbiddenRules : null // 只有黑棋需要禁手规则
+        }),
+      });
+      
+      // 处理API响应
+      let data;
+      try {
+        data = await response.json();
+        
+        // 保存会话ID
+        if (data.sessionId) {
+          if (currentPlayer === 'black') {
+            setBlackSessionId(data.sessionId);
+          } else {
+            setWhiteSessionId(data.sessionId);
+          }
+        }
+        
+        // 检查是否有坐标自动修正提示
+        if (data.error && data.row !== undefined && data.col !== undefined) {
+          // 如果API返回了修正后的落子位置，显示错误提示但仍使用修正的坐标
+          setErrorMessage(`AI返回错误: ${data.error}`);
+          
+          console.log(`使用修正后的坐标: (${data.row}, ${data.col})`);
+          const gameEnded = addMove(data.row, data.col, currentPlayer);
+          if (!gameEnded) {
+            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+          }
+          setIsThinking(false);
+          setMoveCount(prevCount => prevCount + 1);
           return;
         }
         
-        if (data.row !== undefined && data.col !== undefined) {
-          const gameEnded = addMove(data.row, data.col, currentPlayer);
+        // 处理返回的错误
+        if (data.error) {
+          console.error('AI返回错误:', data.error);
           
+          // 检查是否需要重试（特定错误类型）
+          const shouldRetry = 
+            (data.error.includes('无法从AI回复中解析有效的移动坐标') || 
+              data.error.includes('AI返回的坐标超出范围') ||
+              data.error.includes('已被占用')) && 
+            retryAttempt < maxRetries;
+          
+          if (shouldRetry) {
+            console.log(`尝试重试请求 (${retryAttempt + 1}/${maxRetries})`);
+            // 等待短暂时间后重试
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // 再次发送请求
+            retryAttempt++;
+            response = await fetch('/api/gobang/move', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                board,
+                apiKey: apiConfig.apiKey,
+                baseUrl: apiConfig.baseUrl,
+                model: apiConfig.model,
+                currentPlayer,
+                promptType,
+                customPrompt,
+                sessionId,
+                moveNumber: moveCount + 1,
+                forbiddenRules: currentPlayer === 'black' ? forbiddenRules : null // 只有黑棋需要禁手规则
+              }),
+            });
+            
+            // 处理重试响应
+            try {
+              data = await response.json();
+              
+              // 更新会话ID
+              if (data.sessionId) {
+                if (currentPlayer === 'black') {
+                  setBlackSessionId(data.sessionId);
+                } else {
+                  setWhiteSessionId(data.sessionId);
+                }
+              }
+              
+              // 检查修正后的坐标
+              if (data.error && data.row !== undefined && data.col !== undefined) {
+                setErrorMessage(`AI请求重试后返回修正坐标: ${data.error}`);
+                
+                const gameEnded = addMove(data.row, data.col, currentPlayer);
+                if (!gameEnded) {
+                  setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+                }
+                setIsThinking(false);
+                setMoveCount(prevCount => prevCount + 1);
+                return;
+              }
+              
+              // 如果仍然有错误，使用本地AI
+              if (data.error) {
+                console.error('重试后仍然出错:', data.error);
+                setErrorMessage(`AI请求重试后仍然出错: ${data.error}，使用本地AI`);
+                // 保存原始玩家
+                const currentPlayerBeforeMove = currentPlayer;
+                const move = findBestMoveClient(board, currentPlayer);
+                if (move) {
+                  const gameEnded = addMove(move.row, move.col, currentPlayer);
+                  if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+                    // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
+                    setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+                  }
+                }
+                setIsThinking(false);
+                setMoveCount(prevCount => prevCount + 1);
+                return;
+              }
+            } catch (parseError) {
+              console.error('解析重试响应出错:', parseError);
+              setErrorMessage(`解析重试响应出错，使用本地AI`);
+              // 保存原始玩家
+              const currentPlayerBeforeMove = currentPlayer;
+              const move = findBestMoveClient(board, currentPlayer);
+              if (move) {
+                const gameEnded = addMove(move.row, move.col, currentPlayer);
+                if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+                  // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
+                  setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+                }
+              }
+              setIsThinking(false);
+              setMoveCount(prevCount => prevCount + 1);
+              return;
+            }
+          } else {
+            // 不需要重试或重试次数已用完
+            setErrorMessage(`AI返回错误: ${data.error}，使用本地AI`);
+            // 保存原始玩家
+            const currentPlayerBeforeMove = currentPlayer;
+            const move = findBestMoveClient(board, currentPlayer);
+            if (move) {
+              const gameEnded = addMove(move.row, move.col, currentPlayer);
+              if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+                // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
+                setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+              }
+            }
+            setIsThinking(false);
+            setMoveCount(prevCount => prevCount + 1);
+            return;
+          }
+        }
+        
+        // 处理成功的响应
+        if (data.row !== undefined && data.col !== undefined) {
+          // 使用AI返回的坐标
+          const gameEnded = addMove(data.row, data.col, currentPlayer);
           if (!gameEnded) {
             // 切换到下一个玩家
             setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
           }
         } else {
-          setErrorMessage(`AI返回了无效的移动。将使用本地AI算法继续游戏。`);
-          // 使用本地AI逻辑作为备选
+          // 无法解析AI的回应，使用本地AI
+          console.error('无法解析AI的回应:', data);
+          setErrorMessage(`无法解析AI的回应，使用本地AI`);
+          // 保存原始玩家
+          const currentPlayerBeforeMove = currentPlayer;
           const move = findBestMoveClient(board, currentPlayer);
           if (move) {
             const gameEnded = addMove(move.row, move.col, currentPlayer);
-            if (!gameEnded) {
+            if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+              // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
               setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
             }
           }
         }
+      } catch (parseError) {
+        // 无法解析响应，使用本地AI
+        console.error('无法解析响应:', parseError);
+        setErrorMessage(`无法解析响应，使用本地AI`);
+        // 保存原始玩家
+        const currentPlayerBeforeMove = currentPlayer;
+        const move = findBestMoveClient(board, currentPlayer);
+        if (move) {
+          const gameEnded = addMove(move.row, move.col, currentPlayer);
+          if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+            // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
+            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+          }
+        }
       }
     } catch (error) {
-      console.error('AI 移动出错:', error);
-      // 错误时尝试使用本地逻辑
-      console.log("出错，降级到本地AI逻辑");
-      setErrorMessage(`API请求出错: ${error instanceof Error ? error.message : '未知错误'}。将使用本地AI算法继续游戏。`);
+      // 捕获的异常，使用本地AI
+      console.error('AI移动出错:', error);
+      setErrorMessage(`AI移动出错: ${error instanceof Error ? error.message : '未知错误'}，使用本地AI`);
+      // 保存原始玩家
+      const currentPlayerBeforeMove = currentPlayer;
       const move = findBestMoveClient(board, currentPlayer);
       if (move) {
         const gameEnded = addMove(move.row, move.col, currentPlayer);
-        
-        if (!gameEnded) {
-          // 切换到下一个玩家
+        if (!gameEnded && currentPlayerBeforeMove === currentPlayer) {
+          // 只有当currentPlayer在处理过程中没有被其他代码修改时才切换
           setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
         }
       }
     } finally {
       setIsThinking(false);
+      setMoveCount(prevCount => prevCount + 1);
     }
-  }, [board, currentPlayer, isGameOver, isThinking]);
+  };
 
   // 处理人类玩家移动
   const handleHumanMove = (row: number, col: number) => {
@@ -509,6 +1188,12 @@ export default function GameBoard({
     // 检查当前玩家是否是人类
     if (getCurrentPlayerType() !== 'human') return;
     
+    // 检查禁手规则（仅对黑棋有效）
+    if (currentPlayer === 'black' && checkForbiddenMoves(board, row, col, currentPlayer)) {
+      // 错误消息已在checkForbiddenMoves函数中设置
+      return;
+    }
+
     const gameEnded = addMove(row, col, currentPlayer);
     
     if (!gameEnded) {
@@ -557,6 +1242,9 @@ export default function GameBoard({
     setMoveHistory([]);
     setShowVictoryModal(false);
     setErrorMessage(null);
+    setBlackSessionId(undefined);
+    setWhiteSessionId(undefined);
+    setMoveCount(0);
   };
 
   // 获取玩家显示名称
@@ -570,9 +1258,222 @@ export default function GameBoard({
       return `AI (${apiConfig.model})`;
     }
     if (playerType === 'computer') {
-      return `电脑棋手`;
+      const algorithm = apiConfig.computerAlgorithm || 'SimpleEval';
+      const difficulty = apiConfig.difficulty || 'medium';
+      return `电脑 (${algorithm}, ${difficulty === 'easy' ? '简单' : difficulty === 'medium' ? '中等' : '困难'})`;
     }
     return playerId;
+  };
+
+  // 检查位置是否违反禁手规则
+  const checkForbiddenMoves = (board: Cell[][], row: number, col: number, player: Cell): boolean => {
+    // 只有黑棋才需要判断禁手
+    if (player !== 'black') return false;
+    
+    // 如果没有启用任何禁手规则，直接返回false
+    if (!forbiddenRules.overline && !forbiddenRules.doubleFour && !forbiddenRules.doubleThree) {
+      return false;
+    }
+    
+    // 创建一个临时棋盘进行检查
+    const tempBoard = board.map(rowCells => [...rowCells]);
+    tempBoard[row][col] = player;
+    
+    // 检查长连禁手
+    if (forbiddenRules.overline && checkOverline(tempBoard, row, col)) {
+      setErrorMessage("长连禁手：黑棋不能形成超过五子的连续棋子");
+      return true;
+    }
+    
+    // 检查双四禁手
+    if (forbiddenRules.doubleFour && checkDoubleFour(tempBoard, row, col)) {
+      setErrorMessage("双四禁手：黑棋不能同时形成两个活四");
+      return true;
+    }
+    
+    // 检查双三禁手
+    if (forbiddenRules.doubleThree && checkDoubleThree(tempBoard, row, col)) {
+      setErrorMessage("双三禁手：黑棋不能同时形成两个活三");
+      return true;
+    }
+    
+    return false;
+  };
+  
+  // 检查长连禁手（六子或更多连成一线）
+  const checkOverline = (board: Cell[][], row: number, col: number): boolean => {
+    const directions = [
+      [0, 1],  // 水平
+      [1, 0],  // 垂直
+      [1, 1],  // 对角线
+      [1, -1]  // 反对角线
+    ];
+    
+    for (const [dx, dy] of directions) {
+      let count = 1;  // 起始点自身
+      
+      // 沿正方向计数
+      for (let i = 1; i < 6; i++) {
+        const newRow = row + dx * i;
+        const newCol = col + dy * i;
+        
+        if (
+          newRow >= 0 && newRow < 19 && 
+          newCol >= 0 && newCol < 19 && 
+          board[newRow][newCol] === 'black'
+        ) {
+          count++;
+        } else {
+          break;
+        }
+      }
+      
+      // 沿反方向计数
+      for (let i = 1; i < 6; i++) {
+        const newRow = row - dx * i;
+        const newCol = col - dy * i;
+        
+        if (
+          newRow >= 0 && newRow < 19 && 
+          newCol >= 0 && newCol < 19 && 
+          board[newRow][newCol] === 'black'
+        ) {
+          count++;
+        } else {
+          break;
+        }
+      }
+      
+      // 如果总数大于等于6，则是长连禁手
+      if (count >= 6) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+  
+  // 检查双四禁手（两个活四）
+  const checkDoubleFour = (board: Cell[][], row: number, col: number): boolean => {
+    let fourCount = 0;
+    const directions = [
+      [0, 1],  // 水平
+      [1, 0],  // 垂直
+      [1, 1],  // 对角线
+      [1, -1]  // 反对角线
+    ];
+    
+    for (const [dx, dy] of directions) {
+      // 检查这个方向上是否有活四
+      if (hasFour(board, row, col, dx, dy)) {
+        fourCount++;
+      }
+    }
+    
+    return fourCount >= 2;
+  };
+  
+  // 检查是否有活四
+  const hasFour = (board: Cell[][], row: number, col: number, dx: number, dy: number): boolean => {
+    const patterns = [
+      [".", "B", "B", "B", "B", "."], // 活四: .BBBB.
+      ["B", ".", "B", "B", "B"],      // 冲四: B.BBB
+      ["B", "B", ".", "B", "B"],      // 冲四: BB.BB
+      ["B", "B", "B", ".", "B"]       // 冲四: BBB.B
+    ];
+    
+    for (const pattern of patterns) {
+      let match = true;
+      
+      for (let i = -2; i <= 3; i++) {
+        const patternIndex = i + 2;
+        if (patternIndex < 0 || patternIndex >= pattern.length) continue;
+        
+        const newRow = row + dx * i;
+        const newCol = col + dy * i;
+        
+        // 检查边界
+        if (newRow < 0 || newRow >= 19 || newCol < 0 || newCol >= 19) {
+          match = false;
+          break;
+        }
+        
+        // 检查棋子
+        const expected = pattern[patternIndex];
+        if (expected === "B" && board[newRow][newCol] !== 'black') {
+          match = false;
+          break;
+        } else if (expected === "." && board[newRow][newCol] !== null) {
+          match = false;
+          break;
+        }
+      }
+      
+      if (match) return true;
+    }
+    
+    return false;
+  };
+  
+  // 检查双三禁手
+  const checkDoubleThree = (board: Cell[][], row: number, col: number): boolean => {
+    let threeCount = 0;
+    const directions = [
+      [0, 1],  // 水平
+      [1, 0],  // 垂直
+      [1, 1],  // 对角线
+      [1, -1]  // 反对角线
+    ];
+    
+    for (const [dx, dy] of directions) {
+      // 检查这个方向上是否有活三
+      if (hasThree(board, row, col, dx, dy)) {
+        threeCount++;
+      }
+    }
+    
+    return threeCount >= 2;
+  };
+  
+  // 检查是否有活三
+  const hasThree = (board: Cell[][], row: number, col: number, dx: number, dy: number): boolean => {
+    const patterns = [
+      [".", ".", "B", "B", "B", "."],  // 活三: ..BBB.
+      [".", "B", ".", "B", "B", "."],  // 活三: .B.BB.
+      [".", "B", "B", ".", "B", "."]   // 活三: .BB.B.
+    ];
+    
+    for (const pattern of patterns) {
+      let match = true;
+      
+      for (let i = -2; i <= 3; i++) {
+        const patternIndex = i + 2;
+        if (patternIndex < 0 || patternIndex >= pattern.length) continue;
+        
+        const newRow = row + dx * i;
+        const newCol = col + dy * i;
+        
+        // 检查边界
+        if (newRow < 0 || newRow >= 19 || newCol < 0 || newCol >= 19) {
+          match = false;
+          break;
+        }
+        
+        // 检查棋子
+        const expected = pattern[patternIndex];
+        if (expected === "B" && board[newRow][newCol] !== 'black') {
+          match = false;
+          break;
+        } else if (expected === "." && board[newRow][newCol] !== null) {
+          match = false;
+          break;
+        }
+      }
+      
+      if (match) return true;
+    }
+    
+    return false;
   };
 
   return (
@@ -582,8 +1483,13 @@ export default function GameBoard({
         <div className="alert alert-warning shadow-lg flex justify-between">
           <div className="flex items-start">
             <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6 mt-1" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            <div className="ml-2 overflow-y-auto" style={{ maxHeight: '3rem' }}>
-              AI API返回错误，由本地电脑玩家落子
+            <div className="ml-2">
+              <p className="font-semibold">{errorMessage}</p>
+              <p className="text-xs opacity-80">
+                {currentPlayer === 'black' 
+                  ? blackPlayer === 'ai' ? `${blackApiConfig.model} → 电脑AI` : '' 
+                  : whitePlayer === 'ai' ? `${whiteApiConfig.model} → 电脑AI` : ''}
+              </p>
             </div>
           </div>
           <button className="btn btn-circle btn-sm ml-auto" onClick={() => setErrorMessage(null)}>
