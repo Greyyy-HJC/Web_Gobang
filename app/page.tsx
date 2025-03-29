@@ -80,6 +80,20 @@ export default function Home() {
   const [blackModel, setBlackModel] = useState('gpt-4o');
   const [whiteModel, setWhiteModel] = useState('gpt-4o');
   
+  // 自定义指令设置
+  const [blackPromptType, setBlackPromptType] = useState<'default' | 'custom'>('default');
+  const [whitePromptType, setWhitePromptType] = useState<'default' | 'custom'>('default');
+  const defaultCustomPrompt = `落子策略优先级:
+1. 获胜优先：检查是否有任何位置可以形成连续5子获胜，如有则立即选择。
+2. 防守反击：阻止对手连成5子，同时寻找反击机会。
+3. 双向威胁：优先形成同时有多个威胁的局面，如双三、双四等。
+4. 中心控制：优先在棋盘中心区域布局，扩大控制范围。
+5. 连续进攻：形成连续的威胁，迫使对手被动防守。
+6. 灵活应变：根据棋局发展灵活调整攻防策略。
+7. 边缘防御：避免在棋盘边缘无效布局，除非有特殊战术需要。`;
+  const [blackCustomPrompt, setBlackCustomPrompt] = useState(defaultCustomPrompt);
+  const [whiteCustomPrompt, setWhiteCustomPrompt] = useState(defaultCustomPrompt);
+  
   // 游戏模式设置
   const [gameModeSetting, setGameModeSetting] = useState<GameModeSetting>({ 
     black: 'human', 
@@ -275,6 +289,53 @@ export default function Home() {
                 ))}
               </select>
             </div>
+            
+            <div className="form-control mt-3">
+              <label className="label">
+                <span className="label-text font-medium">策略设置</span>
+              </label>
+              <select
+                className="select select-bordered w-full"
+                value={side === 'black' ? blackPromptType : whitePromptType}
+                onChange={(e) => {
+                  if (side === 'black') {
+                    setBlackPromptType(e.target.value as 'default' | 'custom');
+                  } else {
+                    setWhitePromptType(e.target.value as 'default' | 'custom');
+                  }
+                }}
+                disabled={isStaticEnv}
+              >
+                <option value="default">默认策略</option>
+                <option value="custom">自定义策略</option>
+              </select>
+            </div>
+            
+            {((side === 'black' && blackPromptType === 'custom') || 
+              (side === 'white' && whitePromptType === 'custom')) && (
+              <div className="form-control mt-3">
+                <label className="label">
+                  <span className="label-text font-medium">自定义AI策略</span>
+                </label>
+                <textarea
+                  className="textarea textarea-bordered w-full"
+                  rows={5}
+                  value={side === 'black' ? blackCustomPrompt : whiteCustomPrompt}
+                  onChange={(e) => {
+                    if (side === 'black') {
+                      setBlackCustomPrompt(e.target.value);
+                    } else {
+                      setWhiteCustomPrompt(e.target.value);
+                    }
+                  }}
+                  placeholder="请输入自定义的落子策略优先级列表。这将替换默认策略部分，其他提示词保持不变。"
+                  disabled={isStaticEnv}
+                />
+                <label className="label">
+                  <span className="label-text-alt text-info">提示：只需输入策略内容，无需包含棋盘描述和JSON返回格式说明。系统会自动处理这些部分。</span>
+                </label>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -350,16 +411,20 @@ export default function Home() {
               whitePlayer={gameModeSetting.white}
               blackApiConfig={{
                 apiKey: blackApiKey,
-                baseUrl: getBaseUrl(blackProvider, blackCustomBaseUrl),
+                baseUrl: blackProvider === 'Custom' ? blackCustomBaseUrl : getProviderConfig(blackProvider).baseUrl,
                 model: blackModel
               }}
               whiteApiConfig={{
                 apiKey: whiteApiKey,
-                baseUrl: getBaseUrl(whiteProvider, whiteCustomBaseUrl),
+                baseUrl: whiteProvider === 'Custom' ? whiteCustomBaseUrl : getProviderConfig(whiteProvider).baseUrl,
                 model: whiteModel
               }}
               blackPlayerId={blackPlayerId}
               whitePlayerId={whitePlayerId}
+              blackPromptType={blackPromptType}
+              whitePromptType={whitePromptType}
+              blackCustomPrompt={blackCustomPrompt}
+              whiteCustomPrompt={whiteCustomPrompt}
               autoPlay={autoPlay}
               onReturnToSettings={() => setGameStarted(false)}
             />

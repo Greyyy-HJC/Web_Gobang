@@ -18,6 +18,10 @@ interface GameBoardProps {
   whiteApiConfig: ApiConfig;
   blackPlayerId: string;
   whitePlayerId: string;
+  blackPromptType?: 'default' | 'custom';
+  whitePromptType?: 'default' | 'custom';
+  blackCustomPrompt?: string;
+  whiteCustomPrompt?: string;
   autoPlay: boolean;
   onReturnToSettings?: () => void;
 }
@@ -300,6 +304,10 @@ export default function GameBoard({
   whiteApiConfig,
   blackPlayerId,
   whitePlayerId,
+  blackPromptType,
+  whitePromptType,
+  blackCustomPrompt,
+  whiteCustomPrompt,
   autoPlay,
   onReturnToSettings 
 }: GameBoardProps) {
@@ -378,6 +386,22 @@ export default function GameBoard({
       const playerConfig = getCurrentPlayerConfig();
       const playerType = getCurrentPlayerType();
       
+      // 验证API配置
+      if (playerType === 'ai' && (!playerConfig.apiKey || playerConfig.apiKey.trim() === '')) {
+        setErrorMessage("API密钥不能为空。将使用本地AI算法继续游戏。");
+        // 使用本地AI逻辑替代
+        await new Promise(resolve => setTimeout(resolve, 800));
+        const move = findBestMoveClient(board, currentPlayer);
+        if (move) {
+          const gameEnded = addMove(move.row, move.col, currentPlayer);
+          if (!gameEnded) {
+            setCurrentPlayer(currentPlayer === 'black' ? 'white' : 'black');
+          }
+        }
+        setIsThinking(false);
+        return;
+      }
+      
       // 判断是否使用本地AI逻辑的情况：
       // 1. 是电脑棋手 (computer)
       // 2. 在GitHub Pages上（hostname包含github.io）
@@ -418,7 +442,9 @@ export default function GameBoard({
             apiKey: playerConfig.apiKey,
             baseUrl: playerConfig.baseUrl,
             model: playerConfig.model,
-            currentPlayer
+            currentPlayer,
+            promptType: currentPlayer === 'black' ? blackPromptType : whitePromptType,
+            customPrompt: currentPlayer === 'black' ? blackCustomPrompt : whiteCustomPrompt
           }),
         });
 
@@ -551,6 +577,23 @@ export default function GameBoard({
 
   return (
     <div className="flex flex-col items-center gap-6 p-4">
+      {/* 错误消息显示 - 移到顶部 */}
+      <div className={`transition-all duration-300 overflow-hidden mb-2 ${errorMessage ? 'max-h-28 opacity-100' : 'max-h-0 opacity-0'}`} style={{ width: '570px' }}>
+        <div className="alert alert-warning shadow-lg flex justify-between">
+          <div className="flex items-start">
+            <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6 mt-1" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <div className="ml-2 overflow-y-auto" style={{ maxHeight: '3rem' }}>
+              AI API返回错误，由本地电脑玩家落子
+            </div>
+          </div>
+          <button className="btn btn-circle btn-sm ml-auto" onClick={() => setErrorMessage(null)}>
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      
       {/* 胜利弹窗 */}
       {showVictoryModal && winner && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center">
@@ -694,19 +737,6 @@ export default function GameBoard({
             )}
           </div>
         </div>
-        
-        {/* 错误消息显示 */}
-        {errorMessage && (
-          <div className="alert alert-warning shadow-lg mt-2">
-            <div>
-              <svg xmlns="http://www.w3.org/2000/svg" className="stroke-current flex-shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-              <span>{errorMessage}</span>
-            </div>
-            <div className="flex-none">
-              <button className="btn btn-sm" onClick={() => setErrorMessage(null)}>关闭</button>
-            </div>
-          </div>
-        )}
         
         {/* 移动历史记录 */}
         {moveHistory.length > 0 && (

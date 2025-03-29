@@ -9,6 +9,8 @@ interface RequestBody {
   baseUrl: string;
   model: string;
   currentPlayer: 'black' | 'white';
+  promptType?: 'default' | 'custom';
+  customPrompt?: string;
 }
 
 function isValidMove(board: Board, row: number, col: number): boolean {
@@ -213,225 +215,269 @@ function evaluatePosition(board: Board, row: number, col: number, player: 'black
   return score;
 }
 
-// 生成棋盘的字符串表示，用于发送给AI
-function formatBoardForAI(board: Board, currentPlayer: 'black' | 'white'): string {
-  const pieces = {
-    black: '●',
-    white: '○',
-    null: '+'
-  };
+// 创建棋盘状态表示
+function createPrompt(board: Cell[][], currentPlayer: 'black' | 'white', promptType?: 'default' | 'custom', customPrompt?: string): string {
+  // 生成棋盘表示
+  let boardStr = '当前棋盘状态 (O=黑棋, X=白棋, .=空)：\n';
   
-  let boardString = '  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8\n';
+  // 添加列标
+  boardStr += '   ';
+  for (let col = 0; col < 19; col++) {
+    boardStr += col.toString().padStart(2, ' ') + ' ';
+  }
+  boardStr += '\n';
   
-  for (let i = 0; i < 19; i++) {
-    boardString += `${i % 10} `;
-    for (let j = 0; j < 19; j++) {
-      boardString += `${pieces[board[i][j] || 'null']} `;
+  // 添加行标和棋盘内容
+  for (let row = 0; row < 19; row++) {
+    boardStr += row.toString().padStart(2, ' ') + ' ';
+    for (let col = 0; col < 19; col++) {
+      const cell = board[row][col];
+      if (cell === 'black') {
+        boardStr += ' O ';
+      } else if (cell === 'white') {
+        boardStr += ' X ';
+      } else {
+        boardStr += ' . ';
+      }
     }
-    boardString += '\n';
+    boardStr += '\n';
   }
   
-  return boardString;
+  // 构建基础提示词
+  const basePrompt = `你是五子棋 (Gobang) 的AI玩家。当前你执${currentPlayer === 'black' ? '黑棋(O)' : '白棋(X)'}。
+
+${boardStr}
+
+请分析当前棋盘状态并给出你的下一步最佳落子位置。五子棋的目标是在横、竖或斜线上率先形成连续的5个棋子。
+
+`;
+
+  // 默认策略部分
+  const defaultStrategy = `落子策略优先级:
+1. 获胜：如果存在一步可以形成连续5子并立即获胜的位置，优先选择此位置。
+2. 防守：如果对手下一步可以形成连续5子，必须阻止对手获胜。
+3. 进攻：优先形成"活四"（两端开放的四子连线），几乎必然获胜。
+4. 防御：阻止对手形成活四或"冲四"（一端开放的四子连线）。
+5. 发展：尝试形成"活三"（两端开放的三子连线）或双活三。
+6. 布局：在棋盘中心区域落子，控制棋盘关键位置。
+7. 连接：与自己已有的棋子保持连接，形成更强的阵型。
+`;
+
+  // 结尾部分
+  const endPrompt = `
+请以JSON格式返回你的落子位置，格式为：
+{"row": 行号, "col": 列号}
+
+行号和列号都是从0开始到18结束的整数。请确保选择一个空白位置落子。`;
+
+  // 如果是自定义策略，替换策略部分
+  if (promptType === 'custom' && customPrompt) {
+    // 使用自定义策略替换默认策略部分
+    return basePrompt + customPrompt + endPrompt;
+  }
+  
+  // 使用默认策略
+  return basePrompt + defaultStrategy + endPrompt;
 }
 
-// 构建提示词
-function buildPrompt(board: Board, currentPlayer: 'black' | 'white'): string {
-  const boardString = formatBoardForAI(board, currentPlayer);
-  const prompt = `你是一位专业的五子棋（Gobang）AI棋手。请分析当前棋局，并选择最佳落子位置。
-
-当前棋盘状态（● 代表黑子，○ 代表白子，+ 代表空位）：
-${boardString}
-
-你是${currentPlayer === 'black' ? '黑棋' : '白棋'}。根据以下五子棋策略和原则选择最佳落子位置：
-
-1. 必胜策略：
-   - 如果有机会形成连续五子，立即落子在该位置
-   - 阻止对手形成连续五子的威胁
-
-2. 进攻策略：
-   - 寻找形成"活四"的位置（两端开放的连续四子）
-   - 寻找形成"双活三"的位置（两个不同方向的活三）
-   - 寻找形成"活三"的位置（两端至少有一个开放的连续三子）
-
-3. 防守策略：
-   - 阻止对手形成活四（最高优先级防守）
-   - 阻止对手形成双活三
-   - 阻止对手形成活三
-
-4. 棋型识别：
-   - 活四：连续四子，一端开放（必须防守）
-   - 冲四：连续四子，被对手子封住一端
-   - 活三：连续三子，两端开放
-   - 眠三：连续三子，一端被封
-   - 活二：连续两子，两端开放
-
-5. 局势评估：
-   - 在初期阶段，优先布局在棋盘中央区域
-   - 在中期，寻找建立进攻态势的位置
-   - 在布局时，尽量形成多个潜在攻击方向
-   - 避免在只有一子相邻的位置落子，除非有明确战术目的
-
-请基于上述策略和当前棋局，分析所有可能的关键位置，选择一个最优的落子位置。
-
-只需返回JSON格式的坐标，格式为：{"row": 行号, "col": 列号}
-不要包含任何其他文本、注释、Markdown格式或代码块。`;
-
-  return prompt;
-}
-
-// 从响应文本中提取JSON
-function extractJSON(text: string): any {
-  // 尝试直接解析
+// 从API响应中提取JSON
+function extractJSON(response: any, currentPlayer: 'black' | 'white'): { row: number, col: number } | null {
   try {
-    return JSON.parse(text);
-  } catch (e) {
-    // 如果直接解析失败，尝试清理文本
+    let content = '';
+    
+    // 处理OpenAI响应格式
+    if (response.choices && response.choices[0] && response.choices[0].message) {
+      content = response.choices[0].message.content;
+    }
+    // 处理Anthropic响应格式
+    else if (response.content && response.content[0] && response.content[0].text) {
+      content = response.content[0].text;
+    }
+    // 处理通用响应格式
+    else if (typeof response === 'string') {
+      content = response;
+    }
+    // 如果无法识别响应格式，退出
+    else {
+      return null;
+    }
+    
+    // 尝试直接解析整个内容
     try {
-      // 移除可能的代码块标记
-      let cleaned = text.replace(/```json\s*/g, '').replace(/```\s*$/g, '');
-      
-      // 查找 { 和 } 之间的内容
-      const match = cleaned.match(/{[^}]*}/);
-      if (match) {
-        return JSON.parse(match[0]);
+      const jsonObj = JSON.parse(content);
+      if (typeof jsonObj.row === 'number' && typeof jsonObj.col === 'number') {
+        return { row: jsonObj.row, col: jsonObj.col };
+      }
+      // 可能是包含在move或position等属性中
+      if (jsonObj.move && typeof jsonObj.move.row === 'number' && typeof jsonObj.move.col === 'number') {
+        return { row: jsonObj.move.row, col: jsonObj.move.col };
+      }
+      if (jsonObj.position && typeof jsonObj.position.row === 'number' && typeof jsonObj.position.col === 'number') {
+        return { row: jsonObj.position.row, col: jsonObj.position.col };
       }
     } catch (e) {
-      // 如果仍然失败，尝试正则表达式提取行列值
+      // 如果直接解析失败，尝试提取JSON字符串
+    }
+    
+    // 尝试从内容中提取JSON对象
+    const jsonRegex = /{[^{}]*"row"\s*:\s*(\d+)[^{}]*"col"\s*:\s*(\d+)[^{}]*}|{[^{}]*"col"\s*:\s*(\d+)[^{}]*"row"\s*:\s*(\d+)[^{}]*}/;
+    const match = content.match(jsonRegex);
+    
+    if (match) {
+      const jsonStr = match[0];
       try {
-        const rowMatch = text.match(/["']?row["']?\s*:\s*(\d+)/i);
-        const colMatch = text.match(/["']?col["']?\s*:\s*(\d+)/i);
-        
-        if (rowMatch && colMatch) {
-          return {
-            row: parseInt(rowMatch[1]),
-            col: parseInt(colMatch[1])
-          };
+        const json = JSON.parse(jsonStr);
+        if ((json.row !== undefined && json.col !== undefined) ||
+            (json.row !== null && json.col !== null)) {
+          return { row: Number(json.row), col: Number(json.col) };
         }
       } catch (e) {
-        // 所有尝试都失败
-        console.error('无法从响应中提取JSON:', text);
+        // JSON解析失败，继续尝试其他方法
       }
     }
+    
+    // 尝试直接从文本中提取坐标数字
+    const coordRegex = /[行|横坐标|x|row]\s*[为是:：\s]+\s*(\d+).*?[列|纵坐标|y|col]\s*[为是:：\s]+\s*(\d+)/i;
+    const coordMatch = content.match(coordRegex);
+    
+    if (coordMatch && coordMatch[1] && coordMatch[2]) {
+      return { row: Number(coordMatch[1]), col: Number(coordMatch[2]) };
+    }
+    
+    // 尝试提取坐标对
+    const pairRegex = /\((\d+)\s*,\s*(\d+)\)/;
+    const pairMatch = content.match(pairRegex);
+    
+    if (pairMatch && pairMatch[1] && pairMatch[2]) {
+      return { row: Number(pairMatch[1]), col: Number(pairMatch[2]) };
+    }
+    
+    // 所有尝试都失败，返回null
+    return null;
+  } catch (error) {
+    console.error('从AI回复中提取JSON时出错:', error);
+    return null;
   }
-  return null;
 }
 
-// 通过AI API获取下一步棋
-async function getAIMove(board: Board, apiConfig: { apiKey: string, baseUrl: string, model: string }, currentPlayer: 'black' | 'white'): Promise<{ row: number, col: number } | null> {
+// 根据不同的API提供商，构建合适的API请求
+const makeApiRequest = async (apiUrl: string, apiKey: string, model: string, prompt: string) => {
   try {
-    const isOpenAI = apiConfig.baseUrl.includes('openai.com');
-    const isAnthropic = apiConfig.baseUrl.includes('anthropic.com');
-    const isDeepseek = apiConfig.baseUrl.includes('deepseek');
-    
-    let response;
-    let move = null;
-    
-    const prompt = buildPrompt(board, currentPlayer);
-    
-    if (isOpenAI) {
-      // OpenAI API
-      response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+    // OpenAI API
+    if (apiUrl.includes('openai.com')) {
+      const response = await fetch(`${apiUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiConfig.apiKey}`
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: apiConfig.model,
+          model: model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
-          response_format: { type: "json_object" } // 明确请求JSON格式
-        })
+          temperature: 0
+        }),
       });
-      
-      const data = await response.json();
-      
-      if (data.choices && data.choices[0] && data.choices[0].message) {
-        const content = data.choices[0].message.content;
-        move = extractJSON(content);
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: "无法解析错误响应" }));
+        return { error: `OpenAI API错误 (${response.status}): ${errData.error?.message || JSON.stringify(errData)}` };
       }
-    } else if (isAnthropic) {
-      // Anthropic API
-      response = await fetch(`${apiConfig.baseUrl}/messages`, {
+
+      return await response.json();
+    } 
+    // Anthropic API
+    else if (apiUrl.includes('anthropic.com')) {
+      const response = await fetch(`${apiUrl}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-api-key': apiConfig.apiKey,
+          'x-api-key': apiKey,
           'anthropic-version': '2023-06-01'
         },
         body: JSON.stringify({
-          model: apiConfig.model,
-          max_tokens: 100,
+          model: model,
+          max_tokens: 300,
           messages: [{ role: 'user', content: prompt }]
-        })
+        }),
       });
-      
-      const data = await response.json();
-      
-      if (data.content && data.content[0] && data.content[0].text) {
-        const content = data.content[0].text;
-        move = extractJSON(content);
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: "无法解析错误响应" }));
+        return { error: `Anthropic API错误 (${response.status}): ${errData.error?.message || JSON.stringify(errData)}` };
       }
-    } else if (isDeepseek) {
-      // Deepseek API
-      response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
+
+      return await response.json();
+    }
+    // 其他API提供商...根据实际情况添加更多处理逻辑
+    else {
+      // 通用API调用格式（尝试兼容其他服务）
+      const response = await fetch(`${apiUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiConfig.apiKey}`
+          'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: apiConfig.model,
+          model: model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3
-        })
+          temperature: 0
+        }),
       });
-      
-      const data = await response.json();
-      
-      if (data.choices && data.choices[0] && data.choices[0].message) {
-        const content = data.choices[0].message.content;
-        move = extractJSON(content);
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({ error: "无法解析错误响应" }));
+        return { error: `API错误 (${response.status}): ${errData.error?.message || JSON.stringify(errData)}` };
       }
-    } else {
-      // 其他API提供商的格式可能不同，这里使用通用格式
-      response = await fetch(apiConfig.baseUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiConfig.apiKey}`
-        },
-        body: JSON.stringify({
-          model: apiConfig.model,
-          prompt: prompt,
-          max_tokens: 100
-        })
-      });
-      
-      const data = await response.json();
-      
-      // 尝试从响应中提取JSON
-      if (data.choices && data.choices[0] && data.choices[0].text) {
-        move = extractJSON(data.choices[0].text);
-      } else if (data.response) {
-        move = extractJSON(data.response);
-      }
+
+      return await response.json();
     }
-    
-    // 验证移动是否有效
-    if (move && typeof move.row === 'number' && typeof move.col === 'number') {
-      if (isValidMove(board, move.row, move.col)) {
-        return move;
-      } else {
-        console.error('AI返回的移动无效:', move);
-      }
-    }
-    
-    // 如果AI返回无效，使用备用算法
-    return findBestMove(board, currentPlayer);
   } catch (error) {
-    console.error('调用AI API时出错:', error);
-    return findBestMove(board, currentPlayer);
+    return { error: `API请求失败: ${error instanceof Error ? error.message : '未知错误'}` };
+  }
+};
+
+// 通过AI API获取下一步棋
+async function getNextMove(
+  board: Cell[][], 
+  apiKey: string, 
+  baseUrl: string, 
+  model: string, 
+  currentPlayer: 'black' | 'white',
+  promptType?: 'default' | 'custom',
+  customPrompt?: string
+): Promise<{row: number, col: number} | {error: string}> {
+  try {
+    const prompt = createPrompt(board, currentPlayer, promptType, customPrompt);
+    
+    const result = await makeApiRequest(baseUrl, apiKey, model, prompt);
+    
+    if (result.error) {
+      return { error: result.error };
+    }
+    
+    // 解析响应
+    const moveCoordinates = extractJSON(result, currentPlayer);
+    
+    if (!moveCoordinates || moveCoordinates.row === undefined || moveCoordinates.col === undefined) {
+      return { error: "无法从AI回复中解析有效的移动坐标" };
+    }
+    
+    const row = Number(moveCoordinates.row);
+    const col = Number(moveCoordinates.col);
+    
+    // 验证坐标是否有效
+    if (
+      isNaN(row) || isNaN(col) ||
+      row < 0 || row >= 19 ||
+      col < 0 || col >= 19 ||
+      board[row][col] !== null
+    ) {
+      return { error: `AI返回的坐标无效 (${row},${col})` };
+    }
+    
+    return { row, col };
+  } catch (error) {
+    return { error: `处理AI回复时出错: ${error instanceof Error ? error.message : '未知错误'}` };
   }
 }
 
@@ -506,7 +552,7 @@ function findBestMove(board: Board, currentPlayer: 'black' | 'white'): { row: nu
 export async function POST(request: Request) {
   try {
     // 解析请求
-    const { board, apiKey, baseUrl, model, currentPlayer } = await request.json() as RequestBody;
+    const { board, apiKey, baseUrl, model, currentPlayer, promptType, customPrompt } = await request.json() as RequestBody;
 
     // 验证API密钥
     if (!apiKey) {
@@ -534,22 +580,22 @@ export async function POST(request: Request) {
 
     if (!board) {
       return NextResponse.json(
-        { error: '缺少棋盘状态' },
+        { error: '棋盘状态不能为空' },
         { status: 400 }
       );
     }
 
-    let move;
-
-    // 如果提供了API密钥和基础URL，尝试使用AI服务
-    if (apiKey && baseUrl && model) {
-      move = await getAIMove(board, { apiKey, baseUrl, model }, currentPlayer);
-    } else {
-      // 否则使用本地逻辑
-      move = findBestMove(board, currentPlayer);
+    // 获取AI下一步
+    const result = await getNextMove(board, apiKey, baseUrl, model, currentPlayer, promptType, customPrompt);
+    
+    // 处理错误情况
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: 400 });
     }
-
-    return NextResponse.json(move);
+    
+    // 返回有效的移动
+    return NextResponse.json(result);
+    
   } catch (error) {
     console.error('处理移动时出错:', error);
     return NextResponse.json(
