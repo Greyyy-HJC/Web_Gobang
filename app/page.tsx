@@ -10,7 +10,7 @@ type GameModeSetting = {
 };
 
 type Provider = 'OpenAI' | 'Anthropic' | 'Deepseek' | 'Qwen' | 'Gemini' | 'Custom';
-type ComputerAlgorithm = 'SimpleEval' | 'NeuralNetwork';
+type ComputerAlgorithm = 'LocalEval' | 'NeuralNetwork' | 'TSS';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 interface ProviderConfig {
@@ -33,20 +33,24 @@ export default function Home() {
   // 电脑棋手算法选项
   const [computerAlgorithms] = useState<{name: ComputerAlgorithm, description: string}[]>([
     { 
-      name: 'SimpleEval', 
-      description: '启发式评估算法，速度快且策略灵活，会根据不同难度调整棋力'
+      name: 'LocalEval', 
+      description: '局部评估算法'
     },
     { 
       name: 'NeuralNetwork', 
-      description: '使用预训练的神经网络模型快速评估棋局，在复杂局面中表现更好'
+      description: '神经网络算法'
+    },
+    { 
+      name: 'TSS', 
+      description: '威胁空间搜索算法'
     }
   ]);
   
-  const [blackComputerAlgorithm, setBlackComputerAlgorithm] = useState<ComputerAlgorithm>('SimpleEval');
-  const [whiteComputerAlgorithm, setWhiteComputerAlgorithm] = useState<ComputerAlgorithm>('SimpleEval');
+  const [blackComputerAlgorithm, setBlackComputerAlgorithm] = useState<ComputerAlgorithm>('LocalEval');
+  const [whiteComputerAlgorithm, setWhiteComputerAlgorithm] = useState<ComputerAlgorithm>('LocalEval');
   
-  const [blackDifficulty, setBlackDifficulty] = useState<Difficulty>('medium');
-  const [whiteDifficulty, setWhiteDifficulty] = useState<Difficulty>('medium');
+  const [blackDifficulty, setBlackDifficulty] = useState<Difficulty>('hard');
+  const [whiteDifficulty, setWhiteDifficulty] = useState<Difficulty>('hard');
 
   // 检测是否在静态环境中
   const [isStaticEnv, setIsStaticEnv] = useState(false);
@@ -107,8 +111,8 @@ export default function Home() {
     model: 'gpt-3.5-turbo',
     isAI: false,
     provider: 'OpenAI',
-    computerAlgorithm: 'SimpleEval',
-    difficulty: 'medium'
+    computerAlgorithm: 'LocalEval',
+    difficulty: 'hard'
   });
   const [whiteApiConfig, setWhiteApiConfig] = useState<ApiConfig>({
     apiKey: '',
@@ -116,8 +120,8 @@ export default function Home() {
     model: 'gpt-3.5-turbo',
     isAI: false,
     provider: 'OpenAI',
-    computerAlgorithm: 'SimpleEval',
-    difficulty: 'medium'
+    computerAlgorithm: 'LocalEval',
+    difficulty: 'hard'
   });
   const [blackProvider, setBlackProvider] = useState<Provider>('OpenAI');
   const [whiteProvider, setWhiteProvider] = useState<Provider>('OpenAI');
@@ -281,52 +285,28 @@ export default function Home() {
           </div>
         ) : playerType === 'computer' ? (
           <>
-            <div className="form-control mt-3">
+            <div className="form-control">
               <label className="label">
-                <span className="label-text font-medium">电脑算法</span>
+                <span className="label-text font-medium">算法选择</span>
               </label>
               <select
-                className="select select-bordered w-full"
+                className="select select-bordered"
                 value={computerAlgorithm}
                 onChange={(e) => {
                   const algo = e.target.value as ComputerAlgorithm;
                   setComputerAlgorithm(algo);
-                  if (side === 'black') {
+                  if (isBlack) {
                     handleBlackApiChange('computerAlgorithm', algo);
                   } else {
                     handleWhiteApiChange('computerAlgorithm', algo);
                   }
                 }}
               >
-                {computerAlgorithms.map(algo => (
-                  <option key={`${side}-${algo.name}`} value={algo.name}>{algo.name}</option>
+                {computerAlgorithms.map((algo) => (
+                  <option key={algo.name} value={algo.name}>
+                    {algo.description}
+                  </option>
                 ))}
-              </select>
-              <div className="text-xs text-info mt-1">
-                {computerAlgorithms.find(algo => algo.name === computerAlgorithm)?.description}
-              </div>
-            </div>
-            
-            <div className="form-control mt-3">
-              <label className="label">
-                <span className="label-text font-medium">难度级别</span>
-              </label>
-              <select
-                className="select select-bordered w-full"
-                value={difficulty}
-                onChange={(e) => {
-                  const diff = e.target.value as Difficulty;
-                  setDifficulty(diff);
-                  if (side === 'black') {
-                    handleBlackApiChange('difficulty', diff);
-                  } else {
-                    handleWhiteApiChange('difficulty', diff);
-                  }
-                }}
-              >
-                <option value="easy">简单</option>
-                <option value="medium">中等</option>
-                <option value="hard">困难</option>
               </select>
             </div>
             

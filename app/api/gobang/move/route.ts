@@ -295,12 +295,37 @@ function createPrompt(
     boardStr += "\n";
   }
   
+  // 创建数字矩阵表示
+  let boardMatrix = "数字棋盘表示 (0=空, 1=黑棋, 2=白棋):\n";
+  boardMatrix += "[\n";
+  for (let row = 0; row < 19; row++) {
+    boardMatrix += "  [";
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === 'black') {
+        boardMatrix += "1"; // 黑棋
+      } else if (board[row][col] === 'white') {
+        boardMatrix += "2"; // 白棋
+      } else {
+        boardMatrix += "0"; // 空位
+      }
+      if (col < 18) boardMatrix += ", ";
+    }
+    boardMatrix += "]";
+    if (row < 18) boardMatrix += ",";
+    boardMatrix += "\n";
+  }
+  boardMatrix += "]\n";
+  
   // 基础提示词
   const basePrompt = `你是一个专业的五子棋AI。你的任务是分析棋盘并返回最佳落子位置。
   
 ${boardStr}
 
-你是${currentPlayer === 'black' ? '黑棋(O)' : '白棋(X)'}。`;
+${boardMatrix}
+
+你是${currentPlayer === 'black' ? '黑棋(O)' : '白棋(X)'}。
+
+重要提示：你只能在棋盘上的空位置（标记为"."或数字矩阵中的"0"）落子。已经有棋子的位置（标记为"O"、"X"或数字矩阵中的"1"、"2"）不能落子。`;
 
   // 添加禁手规则说明（仅针对黑棋）
   let forbiddenRulesStr = "";
@@ -342,7 +367,8 @@ ${boardStr}
 
 ${customPrompt}
 
-请分析当前局势并返回你认为的最佳落子位置，只返回JSON格式的坐标{"row": 行号, "col": 列号}，不要包含任何解释或额外文本。`;
+请分析当前局势并返回你认为的最佳落子位置，只返回JSON格式的坐标{"row": 行号, "col": 列号}，不要包含任何解释或额外文本。
+再次提醒：你只能在空位置(0)落子，不能在已有棋子的位置(1或2)落子。`;
     
     // 替换棋盘状态和颜色占位符
     return fullPrompt
@@ -355,7 +381,8 @@ ${customPrompt}
 
 ${defaultStrategy}
 
-请分析当前局势并返回你认为的最佳落子位置，只返回JSON格式的坐标{"row": 行号, "col": 列号}，不要包含任何解释或额外文本。`;
+请分析当前局势并返回你认为的最佳落子位置，只返回JSON格式的坐标{"row": 行号, "col": 列号}，不要包含任何解释或额外文本。
+再次提醒：你只能在空位置(0)落子，不能在已有棋子的位置(1或2)落子。`;
 }
 
 // 从API响应中提取JSON
@@ -934,9 +961,34 @@ function createSimplifiedPrompt(
     boardStr += '\n';
   }
   
+  // 创建数字矩阵表示
+  let boardMatrix = "数字棋盘表示 (0=空, 1=黑棋, 2=白棋):\n";
+  boardMatrix += "[\n";
+  for (let row = 0; row < 19; row++) {
+    boardMatrix += "  [";
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === 'black') {
+        boardMatrix += "1"; // 黑棋
+      } else if (board[row][col] === 'white') {
+        boardMatrix += "2"; // 白棋
+      } else {
+        boardMatrix += "0"; // 空位
+      }
+      if (col < 18) boardMatrix += ", ";
+    }
+    boardMatrix += "]";
+    if (row < 18) boardMatrix += ",";
+    boardMatrix += "\n";
+  }
+  boardMatrix += "]\n";
+  
   let prompt = `这是第${moveNumber}步。现在轮到${currentPlayer === 'black' ? '黑棋(O)' : '白棋(X)'}落子。
 
-${boardStr}`;
+${boardStr}
+
+${boardMatrix}
+
+重要提示：你只能在棋盘上的空位置（标记为"."或数字矩阵中的"0"）落子。已经有棋子的位置（标记为"O"、"X"或数字矩阵中的"1"、"2"）不能落子。`;
 
   // 如果当前玩家是黑棋，并且有禁手规则，添加禁手规则说明
   if (currentPlayer === 'black' && forbiddenRules) {
@@ -958,6 +1010,7 @@ ${boardStr}`;
   }
 
   prompt += "\n请分析当前局面，找出最佳落子点，并以JSON格式返回坐标: {\"row\": 行号, \"col\": 列号}";
+  prompt += "\n再次提醒：你只能在空位置(0)落子，不能在已有棋子的位置(1或2)落子。";
   
   return prompt;
 }
