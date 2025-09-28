@@ -29,6 +29,43 @@ interface ApiConfig {
   difficulty?: Difficulty;
 }
 
+const iosCardClass = "rounded-3xl border border-white/60 bg-white/80 p-6 shadow-[0_28px_60px_-30px_rgba(30,41,59,0.45)] backdrop-blur-xl";
+const iosSectionCardClass = `${iosCardClass} transition-transform hover:-translate-y-0.5`;
+const iosSubtleCardClass = "rounded-2xl border border-white/70 bg-white/60 p-4 shadow-sm backdrop-blur";
+const iosInputClass = "w-full rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-inner focus:border-[#007AFF] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40";
+const iosSelectClass = `${iosInputClass} appearance-none pr-10`;
+const iosTextareaClass = "w-full rounded-2xl border border-slate-200 bg-white/70 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 shadow-inner focus:border-[#007AFF] focus:outline-none focus:ring-2 focus:ring-[#007AFF]/40";
+const iosLabelClass = "text-sm font-semibold text-slate-700";
+const iosHelperTextClass = "text-xs text-slate-500";
+const iosPrimaryButtonClass = "w-full rounded-full bg-[#007AFF] px-6 py-3 text-lg font-semibold text-white shadow-[0_24px_40px_-20px_rgba(0,122,255,0.65)] transition hover:bg-[#0066d6] active:bg-[#0054ad] focus:outline-none focus:ring-4 focus:ring-[#007AFF]/40";
+
+interface IOSToggleProps {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  id?: string;
+  disabled?: boolean;
+}
+
+const IOSToggle = ({ checked, onChange, id, disabled }: IOSToggleProps) => (
+  <label
+    htmlFor={id}
+    className={`relative inline-flex h-7 w-12 items-center ${disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+  >
+    <input
+      id={id}
+      type="checkbox"
+      role="switch"
+      aria-checked={checked}
+      checked={checked}
+      onChange={(event) => onChange(event.target.checked)}
+      disabled={disabled}
+      className="peer sr-only"
+    />
+    <span className="absolute inset-0 rounded-full bg-slate-200 transition peer-checked:bg-[#34C759] peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#0A84FF]" />
+    <span className="absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow-[0_4px_12px_rgba(0,0,0,0.12)] transition peer-checked:translate-x-5 peer-checked:shadow-[0_4px_12px_rgba(0,0,0,0.18)]" />
+  </label>
+);
+
 export default function Home() {
   // 电脑棋手算法选项
   const [computerAlgorithms] = useState<{name: ComputerAlgorithm, description: string}[]>([
@@ -71,27 +108,27 @@ export default function Home() {
     {
       name: 'OpenAI',
       baseUrl: 'https://api.openai.com/v1',
-      models: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo']
+      models: ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini']
     },
     {
       name: 'Anthropic',
       baseUrl: 'https://api.anthropic.com/v1',
-      models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku']
+      models: ['claude-3.5-sonnet', 'claude-3.5-haiku', 'claude-3-opus']
     },
     {
       name: 'Deepseek',
       baseUrl: 'https://api.deepseek.com/v1',
-      models: ['deepseek-chat', 'deepseek-coder']
+      models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
     },
     {
       name: 'Qwen',
       baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
-      models: ['qwen-max', 'qwen-plus', 'qwen-turbo']
+      models: ['qwen2.5-72b-instruct', 'qwen2.5-32b-instruct', 'qwen-max']
     },
     {
       name: 'Gemini',
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-      models: ['gemini-pro', 'gemini-1.5-pro']
+      models: ['gemini-1.5-pro-latest', 'gemini-1.5-flash', 'gemini-1.0-pro']
     },
     {
       name: 'Custom',
@@ -108,7 +145,7 @@ export default function Home() {
   const [blackApiConfig, setBlackApiConfig] = useState<ApiConfig>({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o-mini',
     isAI: false,
     provider: 'OpenAI',
     computerAlgorithm: 'LocalEval',
@@ -117,7 +154,7 @@ export default function Home() {
   const [whiteApiConfig, setWhiteApiConfig] = useState<ApiConfig>({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o-mini',
     isAI: false,
     provider: 'OpenAI',
     computerAlgorithm: 'LocalEval',
@@ -127,8 +164,8 @@ export default function Home() {
   const [whiteProvider, setWhiteProvider] = useState<Provider>('OpenAI');
   const [blackCustomBaseUrl, setBlackCustomBaseUrl] = useState('');
   const [whiteCustomBaseUrl, setWhiteCustomBaseUrl] = useState('');
-  const [blackModel, setBlackModel] = useState('gpt-4o');
-  const [whiteModel, setWhiteModel] = useState('gpt-4o');
+  const [blackModel, setBlackModel] = useState('gpt-4o-mini');
+  const [whiteModel, setWhiteModel] = useState('gpt-4o-mini');
   
   // 自定义指令设置
   const [blackPromptType, setBlackPromptType] = useState<'default' | 'custom'>('default');
@@ -230,7 +267,6 @@ export default function Home() {
     const customBaseUrl = isBlack ? blackCustomBaseUrl : whiteCustomBaseUrl;
     const setCustomBaseUrl = isBlack ? setBlackCustomBaseUrl : setWhiteCustomBaseUrl;
     const apiConfig = isBlack ? blackApiConfig : whiteApiConfig;
-    const setApiConfig = isBlack ? setBlackApiConfig : setWhiteApiConfig;
     const model = isBlack ? blackModel : whiteModel;
     const setModel = isBlack ? setBlackModel : setWhiteModel;
     const playerId = isBlack ? blackPlayerId : whitePlayerId;
@@ -239,233 +275,252 @@ export default function Home() {
     const setComputerAlgorithm = isBlack ? setBlackComputerAlgorithm : setWhiteComputerAlgorithm;
     const difficulty = isBlack ? blackDifficulty : whiteDifficulty;
     const setDifficulty = isBlack ? setBlackDifficulty : setWhiteDifficulty;
-    
+
+    const algorithmDescriptions: Record<ComputerAlgorithm, string> = {
+      LocalEval: '局部评估：对棋盘位置进行静态评估，计算落子点周围的棋型分值，兼顾进攻与防守。',
+      NeuralNetwork: '神经网络：识别复杂棋型并制定平衡策略，适合追求稳定表现的玩家。',
+      TSS: '威胁空间搜索：优先寻找强力杀招与防守点，攻势凌厉，擅长制造双三、双四手段。'
+    };
+
+    const handlePlayerTypeChange = (value: PlayerType) => {
+      if (isBlack) {
+        handleBlackPlayerTypeChange(value);
+      } else {
+        handleWhitePlayerTypeChange(value);
+      }
+    };
+
+    const handleAlgorithmChange = (value: ComputerAlgorithm) => {
+      setComputerAlgorithm(value);
+      if (isBlack) {
+        handleBlackApiChange('computerAlgorithm', value);
+      } else {
+        handleWhiteApiChange('computerAlgorithm', value);
+      }
+    };
+
+    const handleDifficultyChange = (value: Difficulty) => {
+      setDifficulty(value);
+      if (isBlack) {
+        handleBlackApiChange('difficulty', value);
+      } else {
+        handleWhiteApiChange('difficulty', value);
+      }
+    };
+
+    const handleApiKeyChange = (newKey: string) => {
+      if (isBlack) {
+        handleBlackApiChange('apiKey', newKey);
+      } else {
+        handleWhiteApiChange('apiKey', newKey);
+      }
+    };
+
+    const sectionTitle = isBlack ? '黑方设置' : '白方设置';
+    const accentLabel = isBlack ? 'BLACK' : 'WHITE';
+
     return (
-      <div className="col-span-2 md:col-span-1 p-4 border rounded-lg bg-base-200">
-        <h3 className="font-bold mb-3 flex items-center">
-          <span className={`inline-block w-4 h-4 rounded-full ${isBlack ? 'bg-black' : 'bg-white border border-gray-300'} mr-2`}></span>
-          {isBlack ? '黑方设置' : '白方设置'}
-        </h3>
-        <div className="form-control">
-          <label className="label">
-            <span className="label-text font-medium">玩家类型</span>
-          </label>
-          <select
-            className="select select-bordered w-full"
-            value={playerType}
-            onChange={(e) => setGameModeSetting({
-              ...gameModeSetting,
-              [side]: e.target.value as PlayerType
-            })}
-          >
-            <option value="human">人类棋手</option>
-            {!isStaticEnv && <option value="ai">AI棋手</option>}
-            {isStaticEnv && <option value="ai" disabled title="静态部署环境不支持AI棋手">AI棋手 (仅本地开发可用)</option>}
-            <option value="computer">电脑棋手</option>
-          </select>
-          {isStaticEnv && playerType === 'ai' && (
-            <div className="text-sm text-warning mt-1">
-              注意：在静态部署环境下，AI棋手将使用本地AI算法，不会调用外部API
+      <div className={`col-span-2 md:col-span-1 ${iosSectionCardClass}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span
+              className={`inline-flex h-4 w-4 items-center justify-center rounded-full ${isBlack ? 'bg-slate-900' : 'bg-white border border-slate-300'}`}
+            />
+            <h3 className="text-lg font-semibold text-slate-900">{sectionTitle}</h3>
+          </div>
+          <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+            {accentLabel}
+          </span>
+        </div>
+
+        <div className="mt-6 space-y-6">
+          <div className="space-y-2">
+            <label className={iosLabelClass}>玩家类型</label>
+            <select
+              className={iosSelectClass}
+              value={playerType}
+              onChange={(event) => handlePlayerTypeChange(event.target.value as PlayerType)}
+            >
+              <option value="human">人类棋手</option>
+              <option value="ai" disabled={isStaticEnv}>
+                AI棋手{isStaticEnv ? '（静态环境受限）' : ''}
+              </option>
+              <option value="computer">电脑棋手</option>
+            </select>
+            {isStaticEnv && playerType === 'ai' && (
+              <p className="rounded-2xl bg-[#FFF4E5] px-3 py-2 text-xs font-medium text-[#B55B00]">
+                静态部署下无法调用外部API，AI棋手会自动切换为本地算法。
+              </p>
+            )}
+          </div>
+
+          {playerType === 'human' && (
+            <div className="space-y-2">
+              <label className={iosLabelClass}>棋手ID</label>
+              <input
+                type="text"
+                className={iosInputClass}
+                value={playerId}
+                onChange={(event) => setPlayerId(event.target.value)}
+                placeholder="输入棋手ID"
+              />
+            </div>
+          )}
+
+          {playerType === 'computer' && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className={iosLabelClass}>算法选择</label>
+                <select
+                  className={iosSelectClass}
+                  value={computerAlgorithm}
+                  onChange={(event) => handleAlgorithmChange(event.target.value as ComputerAlgorithm)}
+                >
+                  {computerAlgorithms.map((algo) => (
+                    <option key={algo.name} value={algo.name}>
+                      {algo.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={`${iosSubtleCardClass} text-sm text-slate-600`}>
+                {algorithmDescriptions[computerAlgorithm]}
+              </div>
+
+              <div className="space-y-2">
+                <label className={iosLabelClass}>难度</label>
+                <select
+                  className={iosSelectClass}
+                  value={difficulty}
+                  onChange={(event) => handleDifficultyChange(event.target.value as Difficulty)}
+                >
+                  <option value="easy">轻松</option>
+                  <option value="medium">均衡</option>
+                  <option value="hard">专家</option>
+                </select>
+                <p className={iosHelperTextClass}>调整电脑棋手的思考深度与防守强度。</p>
+              </div>
+
+              <div className="rounded-2xl border border-[#0A84FF]/25 bg-[#F0F6FF]/80 p-4 text-sm text-[#0A2463]">
+                电脑棋手使用本地算法，可在任何环境下运行（包括静态部署）。
+              </div>
+            </div>
+          )}
+
+          {playerType === 'ai' && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className={iosLabelClass}>选择AI提供商</label>
+                <select
+                  className={`${iosSelectClass} ${isStaticEnv ? 'opacity-50' : ''}`}
+                  value={provider}
+                  onChange={(event) => setProvider(event.target.value as Provider)}
+                  disabled={isStaticEnv}
+                >
+                  <optgroup label="大语言模型">
+                    <option value="OpenAI">OpenAI</option>
+                    <option value="Anthropic">Anthropic</option>
+                    <option value="Deepseek">Deepseek</option>
+                    <option value="Qwen">Qwen</option>
+                    <option value="Gemini">Gemini</option>
+                  </optgroup>
+                  <option value="Custom">Custom</option>
+                </select>
+              </div>
+
+              {provider === 'Custom' && (
+                <div className="space-y-2">
+                  <label className={iosLabelClass}>自定义API基础URL</label>
+                  <input
+                    type="text"
+                    className={`${iosInputClass} ${isStaticEnv ? 'opacity-50' : ''}`}
+                    value={customBaseUrl}
+                    onChange={(event) => setCustomBaseUrl(event.target.value)}
+                    placeholder="例如：https://api.example.com/v1"
+                    disabled={isStaticEnv}
+                  />
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className={iosLabelClass}>选择模型</label>
+                <select
+                  className={`${iosSelectClass} ${isStaticEnv ? 'opacity-50' : ''}`}
+                  value={model}
+                  onChange={(event) => setModel(event.target.value)}
+                  disabled={isStaticEnv}
+                >
+                  {getModelsForProvider(provider, customBaseUrl).map((m) => (
+                    <option key={`${side}-${m}`} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {!['AlphaZero', 'Minimax', 'MCTS'].includes(provider) && (
+                <div className="space-y-2">
+                  <label className={iosLabelClass}>API密钥</label>
+                  <input
+                    type="password"
+                    className={`${iosInputClass} font-mono tracking-widest ${isStaticEnv ? 'opacity-50' : ''}`}
+                    value={apiConfig.apiKey}
+                    onChange={(event) => handleApiKeyChange(event.target.value)}
+                    placeholder="输入API密钥"
+                    disabled={isStaticEnv}
+                  />
+                </div>
+              )}
+
+              {!['AlphaZero', 'Minimax', 'MCTS'].includes(provider) && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className={iosLabelClass}>策略设置</label>
+                    <select
+                      className={`${iosSelectClass} ${isStaticEnv ? 'opacity-50' : ''}`}
+                      value={side === 'black' ? blackPromptType : whitePromptType}
+                      onChange={(event) => {
+                        const value = event.target.value as 'default' | 'custom';
+                        if (isBlack) {
+                          setBlackPromptType(value);
+                        } else {
+                          setWhitePromptType(value);
+                        }
+                      }}
+                      disabled={isStaticEnv}
+                    >
+                      <option value="default">默认策略</option>
+                      <option value="custom">自定义策略</option>
+                    </select>
+                  </div>
+
+                  {((isBlack && blackPromptType === 'custom') || (!isBlack && whitePromptType === 'custom')) && (
+                    <div className="space-y-2">
+                      <label className={iosLabelClass}>自定义AI策略</label>
+                      <textarea
+                        className={`${iosTextareaClass} min-h-[160px] ${isStaticEnv ? 'opacity-50' : ''}`}
+                        value={isBlack ? blackCustomPrompt : whiteCustomPrompt}
+                        onChange={(event) => {
+                          if (isBlack) {
+                            setBlackCustomPrompt(event.target.value);
+                          } else {
+                            setWhiteCustomPrompt(event.target.value);
+                          }
+                        }}
+                        placeholder="输入自定义的落子策略优先级，系统将自动补充棋盘描述与输出格式。"
+                        disabled={isStaticEnv}
+                      />
+                      <p className={`${iosHelperTextClass} text-[#0A84FF]`}>
+                        提示：只填写策略内容，无需包含棋盘状态或回答格式说明。
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
-        
-        {playerType === 'human' ? (
-          <div className="form-control mt-3">
-            <label className="label">
-              <span className="label-text font-medium">棋手ID</span>
-            </label>
-            <input
-              type="text"
-              className="input input-bordered w-full"
-              value={playerId}
-              onChange={(e) => setPlayerId(e.target.value)}
-              placeholder="输入棋手ID"
-            />
-          </div>
-        ) : playerType === 'computer' ? (
-          <>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text font-medium">算法选择</span>
-              </label>
-              <select
-                className="select select-bordered"
-                value={computerAlgorithm}
-                onChange={(e) => {
-                  const algo = e.target.value as ComputerAlgorithm;
-                  setComputerAlgorithm(algo);
-                  if (isBlack) {
-                    handleBlackApiChange('computerAlgorithm', algo);
-                  } else {
-                    handleWhiteApiChange('computerAlgorithm', algo);
-                  }
-                }}
-              >
-                {computerAlgorithms.map((algo) => (
-                  <option key={algo.name} value={algo.name}>
-                    {algo.description}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {/* 算法说明文本 */}
-            <div className="mt-2">
-              <p className="text-sm text-blue-600">
-                {side === 'black' 
-                  ? blackApiConfig.computerAlgorithm === 'LocalEval'
-                    ? '局部评估：对棋盘位置进行静态评估，计算落子点周围的棋型分值。运算速度快，适合初学者。'
-                    : blackApiConfig.computerAlgorithm === 'NeuralNetwork'
-                    ? '神经网络：使用简化神经网络评估棋局，能识别基本棋型并进行防守。运算效率高，策略更灵活。'
-                    : '威胁空间搜索：分析棋盘威胁空间，优先形成连续攻击态势。识别活三、活四等高级棋型，具有较强攻击性。'
-                  : whiteApiConfig.computerAlgorithm === 'LocalEval'
-                    ? '局部评估：对棋盘位置进行静态评估，计算落子点周围的棋型分值。运算速度快，适合初学者。'
-                    : whiteApiConfig.computerAlgorithm === 'NeuralNetwork'
-                    ? '神经网络：使用简化神经网络评估棋局，能识别基本棋型并进行防守。运算效率高，策略更灵活。'
-                    : '威胁空间搜索：分析棋盘威胁空间，优先形成连续攻击态势。识别活三、活四等高级棋型，具有较强攻击性。'
-                }
-              </p>
-            </div>
-            
-            <div className="mt-3 p-3 bg-info bg-opacity-10 rounded-md">
-              <p className="text-sm">电脑棋手使用本地算法，可在任何环境下运行（包括静态部署）</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="form-control mt-3">
-              <label className="label">
-                <span className="label-text font-medium">选择AI提供商</span>
-              </label>
-              <select
-                className="select select-bordered w-full"
-                value={provider}
-                onChange={(e) => {
-                  setProvider(e.target.value as Provider);
-                }}
-                disabled={isStaticEnv}
-              >
-                <optgroup label="大语言模型">
-                  <option value="OpenAI">OpenAI</option>
-                  <option value="Anthropic">Anthropic</option>
-                  <option value="Deepseek">Deepseek</option>
-                  <option value="Qwen">Qwen</option>
-                  <option value="Gemini">Gemini</option>
-                </optgroup>
-                <option value="Custom">Custom</option>
-              </select>
-            </div>
-            
-            {provider === 'Custom' && (
-              <div className="form-control mt-3">
-                <label className="label">
-                  <span className="label-text font-medium">自定义API基础URL</span>
-                </label>
-                <input
-                  type="text"
-                  className="input input-bordered w-full"
-                  value={customBaseUrl}
-                  onChange={(e) => setCustomBaseUrl(e.target.value)}
-                  placeholder="例如：https://api.example.com/v1"
-                  disabled={isStaticEnv}
-                />
-              </div>
-            )}
-            
-            <div className="form-control mt-3">
-              <label className="label">
-                <span className="label-text font-medium">选择模型</span>
-              </label>
-              <select
-                className="select select-bordered w-full"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={isStaticEnv}
-              >
-                {getModelsForProvider(provider, customBaseUrl).map(m => (
-                  <option key={`${side}-${m}`} value={m}>{m}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* API密钥输入框，仅对需要API密钥的提供商显示 */}
-            {!['AlphaZero', 'Minimax', 'MCTS'].includes(provider) && (
-              <div className="form-control mt-3">
-                <label className="label">
-                  <span className="label-text font-medium">API密钥</span>
-                </label>
-                <input
-                  type="password"
-                  className="input input-bordered w-full"
-                  value={apiConfig.apiKey}
-                  onChange={(e) => {
-                    const newApiKey = e.target.value;
-                    if (side === 'black') {
-                      handleBlackApiChange('apiKey', newApiKey);
-                    } else {
-                      handleWhiteApiChange('apiKey', newApiKey);
-                    }
-                  }}
-                  placeholder="输入API密钥"
-                  disabled={isStaticEnv}
-                />
-              </div>
-            )}
-            
-            {/* 策略设置，仅对非专用棋类引擎显示 */}
-            {!['AlphaZero', 'Minimax', 'MCTS'].includes(provider) && (
-              <>
-                <div className="form-control mt-3">
-                  <label className="label">
-                    <span className="label-text font-medium">策略设置</span>
-                  </label>
-                  <select
-                    className="select select-bordered w-full"
-                    value={side === 'black' ? blackPromptType : whitePromptType}
-                    onChange={(e) => {
-                      if (side === 'black') {
-                        setBlackPromptType(e.target.value as 'default' | 'custom');
-                      } else {
-                        setWhitePromptType(e.target.value as 'default' | 'custom');
-                      }
-                    }}
-                    disabled={isStaticEnv}
-                  >
-                    <option value="default">默认策略</option>
-                    <option value="custom">自定义策略</option>
-                  </select>
-                </div>
-                
-                {((side === 'black' && blackPromptType === 'custom') || 
-                  (side === 'white' && whitePromptType === 'custom')) && (
-                  <div className="form-control mt-3">
-                    <label className="label">
-                      <span className="label-text font-medium">自定义AI策略</span>
-                    </label>
-                    <textarea
-                      className="textarea textarea-bordered w-full"
-                      rows={5}
-                      value={side === 'black' ? blackCustomPrompt : whiteCustomPrompt}
-                      onChange={(e) => {
-                        if (side === 'black') {
-                          setBlackCustomPrompt(e.target.value);
-                        } else {
-                          setWhiteCustomPrompt(e.target.value);
-                        }
-                      }}
-                      placeholder="请输入自定义的落子策略优先级列表。这将替换默认策略部分，其他提示词保持不变。"
-                      disabled={isStaticEnv}
-                    />
-                    <label className="label">
-                      <span className="label-text-alt text-info">提示：只需输入策略内容，无需包含棋盘描述和JSON返回格式说明。系统会自动处理这些部分。</span>
-                    </label>
-                  </div>
-                )}
-              </>
-            )}
-          </>
-        )}
       </div>
     );
   };
@@ -530,116 +585,134 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-base-200 to-base-300">
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex flex-col items-center">
-          <h1 className="text-5xl font-bold text-center mb-4 text-primary">Web Gobang</h1>
-          <a 
-            href="https://github.com/Greyyy-HJC/Web_Gobang"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-gray-600 hover:text-primary mb-4 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
-            </svg>
-            <span>在 GitHub 上查看源码</span>
-          </a>
-          <p className="text-xl text-center mb-8 max-w-2xl">
-            经典五子棋游戏，支持人人对战、人机对战和AI互相对战
+    <div className="relative min-h-screen bg-gradient-to-b from-[#F2F4F8] via-[#F8F8FB] to-[#E9ECF5]">
+      <div className="mx-auto flex max-w-6xl flex-col px-4 py-12 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center">
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-4 py-1 text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 shadow-sm">
+            Inspired by iOS
+          </span>
+          <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-900 sm:text-5xl md:text-6xl">
+            Web Gobang
+          </h1>
+          <p className="mt-4 text-lg text-slate-600 md:text-xl">
+            经典五子棋的现代演绎，支持人人对战、人机对战与 AI 策略对弈。
           </p>
+          <div className="mt-6 flex justify-center gap-3">
+            <a
+              href="https://github.com/Greyyy-HJC/Web_Gobang"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/70 px-4 py-2 text-sm font-medium text-slate-600 shadow-sm transition hover:border-[#007AFF]/60 hover:text-[#007AFF]"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" className="text-slate-500">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+              </svg>
+              <span>在 GitHub 上查看源码</span>
+            </a>
+          </div>
         </div>
-        
+
         {!gameStarted ? (
-          <div className="max-w-2xl mx-auto bg-base-100 p-8 rounded-xl shadow-xl border border-base-300">
-            <h2 className="text-2xl font-bold mb-6 text-center">游戏设置</h2>
-            
-            {/* 玩家设置部分 */}
-            <div className="grid grid-cols-2 gap-6 mb-6">
+          <div className={`${iosCardClass} mx-auto mt-12 w-full max-w-4xl`}>
+            <div className="mb-10 text-center">
+              <h2 className="text-2xl font-semibold text-slate-900">游戏设置</h2>
+              <p className="mt-2 text-sm text-slate-500">自定义双方角色、AI 模型与禁手规则，打造理想的对局体验。</p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2 md:gap-8">
               {renderPlayerSettings('black')}
               {renderPlayerSettings('white')}
             </div>
-            
-            {/* 自动对弈设置 */}
-            {(isAIvsAI || 
+
+            {(isAIvsAI ||
               (gameModeSetting.black === 'computer' && gameModeSetting.white === 'computer') ||
               (gameModeSetting.black === 'ai' && gameModeSetting.white === 'computer') ||
               (gameModeSetting.black === 'computer' && gameModeSetting.white === 'ai')) && (
-              <div className="form-control my-4 p-4 bg-info bg-opacity-10 rounded-lg">
-                <div className="flex items-center">
-                  <input 
-                    type="checkbox" 
-                    className="toggle toggle-primary mr-3" 
-                    checked={autoPlay}
-                    onChange={(e) => setAutoPlay(e.target.checked)}
-                  />
-                  <span>自动对弈模式（自动对战，无需手动控制）</span>
+              <div className={`${iosSubtleCardClass} my-8 flex flex-col gap-3 md:flex-row md:items-center md:justify-between`}>
+                <div>
+                  <p className="text-sm font-semibold text-slate-700">自动对弈模式</p>
+                  <p className={iosHelperTextClass}>开启后双方自动依照策略落子，无需手动确认。</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <IOSToggle id="auto-play-toggle" checked={autoPlay} onChange={(checked) => setAutoPlay(checked)} />
+                  <span className="text-sm text-slate-500">{autoPlay ? '已开启' : '未开启'}</span>
                 </div>
               </div>
             )}
-            
+
             {isHumanVsHuman && (
-              <div className="form-control my-4 p-4 bg-warning bg-opacity-10 rounded-lg">
-                <div className="flex items-center">
-                  <span className="text-warning-content">人人对战模式下，黑白两方玩家将轮流在同一设备上落子。</span>
-                </div>
+              <div className="my-8 rounded-2xl border border-amber-200/70 bg-amber-50/80 p-4 text-sm text-amber-700 shadow-sm">
+                人人对战模式下，黑白双方将在同一设备上轮流落子。
               </div>
             )}
 
-            <h2 className="text-xl font-bold mt-6 mb-3">禁手规则</h2>
-            <div className="flex justify-between items-center my-4">
-              <div className="form-control flex-row items-center">
-                <span className="font-medium mr-2 tooltip" data-tip="黑棋不能形成连续六子或更多子的连线">长连禁手 (≥6子)</span>
-                <input 
-                  type="checkbox" 
-                  className="toggle toggle-primary" 
-                  checked={forbiddenRules.overline}
-                  onChange={(e) => handleForbiddenRuleChange('overline', e.target.checked)}
-                />
+            <div className="mt-10 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">禁手规则</h2>
+                <span className="rounded-full bg-white/70 px-3 py-1 text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                  Optional
+                </span>
               </div>
-              <div className="form-control flex-row items-center">
-                <span className="font-medium mr-2 tooltip" data-tip="黑棋一步棋不能同时形成两个活四">双四禁手</span>
-                <input 
-                  type="checkbox" 
-                  className="toggle toggle-primary" 
-                  checked={forbiddenRules.doubleFour}
-                  onChange={(e) => handleForbiddenRuleChange('doubleFour', e.target.checked)}
-                />
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className={`${iosSubtleCardClass} flex items-start justify-between gap-4`}>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">长连禁手 (≥6子)</p>
+                    <p className={iosHelperTextClass}>黑棋不得形成六子或以上的连续棋子。</p>
+                  </div>
+                  <IOSToggle
+                    id="forbidden-overline"
+                    checked={forbiddenRules.overline}
+                    onChange={(checked) => handleForbiddenRuleChange('overline', checked)}
+                  />
+                </div>
+
+                <div className={`${iosSubtleCardClass} flex items-start justify-between gap-4`}>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">双四禁手</p>
+                    <p className={iosHelperTextClass}>黑棋一步不可同时形成两个活四。</p>
+                  </div>
+                  <IOSToggle
+                    id="forbidden-doubleFour"
+                    checked={forbiddenRules.doubleFour}
+                    onChange={(checked) => handleForbiddenRuleChange('doubleFour', checked)}
+                  />
+                </div>
+
+                <div className={`${iosSubtleCardClass} flex items-start justify-between gap-4`}>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-700">双三禁手</p>
+                    <p className={iosHelperTextClass}>黑棋一步不可同时形成两个活三。</p>
+                  </div>
+                  <IOSToggle
+                    id="forbidden-doubleThree"
+                    checked={forbiddenRules.doubleThree}
+                    onChange={(checked) => handleForbiddenRuleChange('doubleThree', checked)}
+                  />
+                </div>
               </div>
-              <div className="form-control flex-row items-center">
-                <span className="font-medium mr-2 tooltip" data-tip="黑棋一步棋不能同时形成两个活三">双三禁手</span>
-                <input 
-                  type="checkbox" 
-                  className="toggle toggle-primary" 
-                  checked={forbiddenRules.doubleThree}
-                  onChange={(e) => handleForbiddenRuleChange('doubleThree', e.target.checked)}
-                />
+
+              <div className={`${iosSubtleCardClass} text-sm text-slate-500`}>
+                <p className="font-semibold text-slate-700">提示</p>
+                <p>禁手规则仅适用于黑棋，是正规比赛中平衡先手优势的常见设置。</p>
               </div>
-            </div>
-            <div className="mt-2 p-3 bg-base-200 rounded-md text-sm">
-              <p className="font-medium">注意：</p>
-              <p>以上禁手规则仅适用于黑棋。白棋无禁手限制。</p>
-              <p>启用禁手规则可以平衡黑棋先行的优势，是标准的五子棋比赛规则。</p>
             </div>
 
-            <button
-              className="btn btn-primary w-full mt-6 text-lg"
-              onClick={handleStartGame}
-            >
+            <button className={`${iosPrimaryButtonClass} mt-10`} onClick={handleStartGame}>
               开始游戏
             </button>
-            
-            <div className="mt-8 p-4 bg-base-200 rounded-lg">
-              <h3 className="font-bold mb-2">游戏规则</h3>
-              <ul className="list-disc pl-5 space-y-1 text-sm">
-                <li>棋盘大小为19×19，与围棋棋盘相同</li>
-                <li>黑方先行，双方轮流在棋盘交叉点落子</li>
-                <li>任意一方在横、竖或斜线上形成连续五子，即为胜利</li>
+
+            <div className={`${iosSubtleCardClass} mt-10 space-y-2 text-sm text-slate-600`}>
+              <h3 className="text-base font-semibold text-slate-800">游戏规则速览</h3>
+              <ul className="list-disc pl-5 space-y-1">
+                <li>棋盘大小为 19 × 19，黑方先行。</li>
+                <li>双方轮流在交叉点落子，形成五连即可获胜。</li>
+                <li>可选禁手规则帮助平衡黑棋先行的优势。</li>
               </ul>
             </div>
           </div>
         ) : (
-          <div>
+          <div className={`${iosCardClass} mt-12 overflow-hidden`}> 
             <GameBoard
               blackPlayer={gameModeSetting.black}
               whitePlayer={gameModeSetting.white}
@@ -674,17 +747,17 @@ export default function Home() {
           </div>
         )}
       </div>
-      
-      <footer className="py-6 text-center text-sm text-gray-500 mt-12">
-        <p>© 2024 Web Gobang | 五子棋在线游戏</p>
-        <a 
+
+      <footer className="mt-16 px-4 py-10 text-center text-sm text-slate-400">
+        <p>© 2024 Web Gobang · 在线五子棋体验</p>
+        <a
           href="https://github.com/Greyyy-HJC/Web_Gobang"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-gray-500 hover:text-primary mt-2"
+          className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/60 px-4 py-2 text-sm font-medium text-slate-500 shadow-sm transition hover:text-[#007AFF]"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" className="text-slate-500">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
           </svg>
           <span>GitHub</span>
         </a>
