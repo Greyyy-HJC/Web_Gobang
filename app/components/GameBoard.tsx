@@ -383,279 +383,295 @@ const isStaticEnvironment = (): boolean => {
 // ===================== 电脑棋手增强算法实现 =====================
 
 // 增强版局部评估算法，根据难度调整策略
-function findEnhancedLocalMove(board: Cell[][], player: 'black' | 'white', difficulty: 'easy' | 'medium' | 'hard'): { row: number, col: number } | null {
-  // 获取对手颜色
+function findEnhancedLocalMove(
+  board: Cell[][],
+  player: 'black' | 'white',
+  difficulty: 'easy' | 'medium' | 'hard'
+): { row: number, col: number } | null {
   const opponent = player === 'black' ? 'white' : 'black';
-  
-  // 建立所有可能的移动以及它们的评分
-  const possibleMoves: { row: number; col: number; score: number }[] = [];
-  
-  // 检查是否有活四/冲四
-  let hasOpenFour = false;
-  let hasBlockingMove = false;
-  
-  // 首先扫描并检测高价值移动
-  for (let row = 0; row < 19; row++) {
-    for (let col = 0; col < 19; col++) {
-      if (board[row][col] !== null) continue;
-      
-      // 创建临时状态
-      board[row][col] = player;
-      
-      // 检查四子连线（己方）
-      if (wouldFormOpenFourClient(board, row, col, player)) {
-        hasOpenFour = true;
-      }
-      
-      // 检查四子连线（对手）
-      if (wouldFormOpenFourClient(board, row, col, opponent)) {
-        hasBlockingMove = true;
-      }
-      
-      // 恢复棋盘
-      board[row][col] = null;
-    }
-  }
-  
-  // 优先考虑关键位置：先计算一下我们需要重点关注的区域
-  const criticalMoves: { row: number; col: number }[] = [];
-  
-  // 寻找可能的关键位置（对抗点）
-  for (let row = 0; row < 19; row++) {
-    for (let col = 0; col < 19; col++) {
-      if (board[row][col] !== null) continue;
-      if (!hasNeighbor(board, row, col, 2)) continue; // 只关注周围有棋子的位置
-      
-      board[row][col] = player;
-      const formsThreats = wouldFormOpenFourClient(board, row, col, player) || 
-                           wouldFormOpenThreeClient(board, row, col, player);
-      board[row][col] = null;
-      
-      board[row][col] = opponent;
-      const blocksThreats = wouldFormOpenFourClient(board, row, col, opponent) || 
-                            wouldFormOpenThreeClient(board, row, col, opponent);
-      board[row][col] = null;
-      
-      if (formsThreats || blocksThreats) {
-        criticalMoves.push({ row, col });
-      }
-    }
-  }
-  
-  // 收集所有可能的移动并计算它们的评分
-  for (let row = 0; row < 19; row++) {
-    for (let col = 0; col < 19; col++) {
-      if (board[row][col] !== null) continue;
-      if (!hasNeighbor(board, row, col, 2)) continue; // 优化：只考虑周围有棋子的位置
-      
-      // 增强评估：我们更重视能形成威胁和防御威胁的位置
-      let score = evaluatePositionClient(board, row, col, player) * 1.5; // 提高基础评估权重
-      
-      // 额外考量：检查这个位置是否有隐藏的威胁价值
-      board[row][col] = player;
-      
-      // 检查连续威胁潜力（设置后续威胁）
-      let threatPotential = 0;
-      let blockPotential = 0;
-      
-      // 检查是否可以形成双三或双四等强力棋形
-      let formThreeCount = 0;
-      let formFourCount = 0;
-      
-      // 检查8个方向上的棋形
-      const directions = [
-        [0, 1], [1, 1], [1, 0], [1, -1],
-        [0, -1], [-1, -1], [-1, 0], [-1, 1]
-      ];
-      
-      for (const [dx, dy] of directions) {
-        // 计算这个方向上的连子数量
-        let lineLength = 1; // 当前位置
-        let openEnds = 0; // 开放端数
-        
-        // 正向检查
-        let x = row + dx;
-        let y = col + dy;
-        let blocked = false;
-        
-        while (x >= 0 && x < 19 && y >= 0 && y < 19) {
-          if (board[x][y] === player) {
-            lineLength++;
-          } else if (board[x][y] === null) {
-            openEnds++;
-            break;
-          } else {
-            blocked = true;
-            break;
-          }
-          x += dx;
-          y += dy;
-        }
-        
-        // 反向检查
-        x = row - dx;
-        y = col - dy;
-        
-        while (x >= 0 && x < 19 && y >= 0 && y < 19) {
-          if (board[x][y] === player) {
-            lineLength++;
-          } else if (board[x][y] === null) {
-            openEnds++;
-            break;
-          } else {
-            blocked = true;
-            break;
-          }
-          x -= dx;
-          y -= dy;
-        }
-        
-        // 基于棋形增加威胁潜力
-        if (lineLength >= 3 && openEnds > 0) {
-          if (lineLength == 3) formThreeCount++;
-          if (lineLength == 4) formFourCount++;
-          
-          // 根据棋形和开放度给分
-          threatPotential += (lineLength * openEnds * 10);
-        }
-      }
-      
-      // 检查是否能阻止对手形成威胁
-      board[row][col] = null;
-      board[row][col] = opponent;
-      
-      let preventsThreeCount = 0;
-      let preventsFourCount = 0;
-      
-      for (const [dx, dy] of directions) {
-        // 计算这个方向上的连子数量
-        let lineLength = 1; // 当前位置
-        let openEnds = 0; // 开放端数
-        
-        // 正向检查
-        let x = row + dx;
-        let y = col + dy;
-        
-        while (x >= 0 && x < 19 && y >= 0 && y < 19) {
-          if (board[x][y] === opponent) {
-            lineLength++;
-          } else if (board[x][y] === null) {
-            openEnds++;
-            break;
-          } else {
-            break;
-          }
-          x += dx;
-          y += dy;
-        }
-        
-        // 反向检查
-        x = row - dx;
-        y = col - dy;
-        
-        while (x >= 0 && x < 19 && y >= 0 && y < 19) {
-          if (board[x][y] === opponent) {
-            lineLength++;
-          } else if (board[x][y] === null) {
-            openEnds++;
-            break;
-          } else {
-            break;
-          }
-          x -= dx;
-          y -= dy;
-        }
-        
-        // 基于阻止对手的棋形增加防御潜力
-        if (lineLength >= 3 && openEnds > 0) {
-          if (lineLength == 3) preventsThreeCount++;
-          if (lineLength == 4) preventsFourCount++;
-          
-          // 根据阻止的棋形和开放度给分
-          blockPotential += (lineLength * openEnds * 8);
-        }
-      }
-      
-      // 恢复棋盘
-      board[row][col] = null;
-      
-      // 关键位置奖励
-      if (criticalMoves.some(move => move.row === row && move.col === col)) {
-        score += 300; // 给关键位置额外加分
-      }
-      
-      // 添加威胁和防御潜力评分
-      score += threatPotential + blockPotential;
-      
-      // 额外奖励双三和双四
-      if (formThreeCount >= 2) score += 500;  // 双三很强
-      if (formFourCount >= 2) score += 1000;  // 双四几乎必胜
-      if (formThreeCount >= 1 && formFourCount >= 1) score += 800;  // 三四组合也很强
-      
-      // 根据对手的威胁调整防御权重
-      if (preventsFourCount > 0) score += 900;  // 非常重要的防御
-      if (preventsThreeCount >= 2) score += 600;  // 防止对手形成双三
-      
-      // 困难模式下不添加难度调整，直接用最强策略
-      if (difficulty !== 'hard') {
-        // 根据难度调整分数
-        switch (difficulty) {
-          case 'easy':
-            // 容易模式下:
-            // 1. 计算机会有20%的几率做出次优的选择
-            // 2. 不会太关注对手的威胁
-            // 3. 偏好随机走子
-            if (Math.random() < 0.2) {
-              score = score * 0.5; // 降低分数
-            }
-            
-            // 降低防守权重
-            if (wouldFormOpenFourClient(board, row, col, opponent) ||
-                wouldFormOpenThreeClient(board, row, col, opponent)) {
-              score = score * 0.7; // 降低防守的优先级
-            }
-            
-            // 添加更多随机性
-            score += Math.random() * 500;
-            break;
-            
-          case 'medium':
-            // 中等模式下:
-            // 1. 平衡进攻和防守
-            // 2. 较少随机性
-            if (wouldFormOpenFourClient(board, row, col, player)) {
-              score += 1000; // 提高己方活四权重
-            }
-            if (wouldFormOpenThreeClient(board, row, col, player)) {
-              score += 500; // 提高己方活三权重
-            }
-            
-            // 添加适度随机性
-            score += Math.random() * 200;
-            break;
-        }
-      }
-      
-      possibleMoves.push({ row, col, score });
-    }
-  }
-  
-  // 特殊情况：如果没有可行的移动，返回第一个空位置
-  if (possibleMoves.length === 0) {
+  const { depth, candidateLimit, randomness } = getSearchParamsForDifficulty(difficulty);
+  const candidates = generateCandidateMoves(board, player, candidateLimit);
+
+  if (candidates.length === 0) {
     return findFirstEmptyCell(board);
   }
-  
-  // 排序移动（根据评分从高到低）
-  possibleMoves.sort((a, b) => b.score - a.score);
-  
-  // hard模式下偶尔会从前3个高评分位置中随机选择一个，增加变化
-  if (difficulty === 'hard' && possibleMoves.length >= 3 && Math.random() < 0.2) {
-    const index = Math.floor(Math.random() * 3);
-    return { row: possibleMoves[index].row, col: possibleMoves[index].col };
+
+  if (depth === 1) {
+    const sorted = [...candidates].sort((a, b) => b.score - a.score);
+    const topChoices = sorted.slice(0, Math.min(3, sorted.length));
+
+    if (randomness > 0 && topChoices.length > 1 && Math.random() < randomness) {
+      const randomIndex = Math.floor(Math.random() * topChoices.length);
+      const move = topChoices[randomIndex];
+      return { row: move.row, col: move.col };
+    }
+
+    const best = topChoices[0];
+    return { row: best.row, col: best.col };
   }
-  
-  // 返回最佳的移动
-  return { row: possibleMoves[0].row, col: possibleMoves[0].col };
+
+  let bestScore = -Infinity;
+  let bestMove = candidates[0];
+
+  for (const move of candidates) {
+    board[move.row][move.col] = player;
+    const score = minimaxSearch(
+      board,
+      depth - 1,
+      -Infinity,
+      Infinity,
+      false,
+      player,
+      opponent,
+      candidateLimit
+    );
+    board[move.row][move.col] = null;
+
+    const adjustedScore = score + move.score * 0.05;
+
+    if (adjustedScore > bestScore) {
+      bestScore = adjustedScore;
+      bestMove = move;
+    }
+  }
+
+  if (randomness > 0 && candidates.length > 1 && Math.random() < randomness) {
+    const index = Math.floor(Math.random() * Math.min(2, candidates.length));
+    const alternative = candidates[index];
+    return { row: alternative.row, col: alternative.col };
+  }
+
+  return { row: bestMove.row, col: bestMove.col };
+}
+
+interface CandidateMove {
+  row: number;
+  col: number;
+  score: number;
+}
+
+function getSearchParamsForDifficulty(difficulty: 'easy' | 'medium' | 'hard'): {
+  depth: number;
+  candidateLimit: number;
+  randomness: number;
+} {
+  switch (difficulty) {
+    case 'easy':
+      return { depth: 1, candidateLimit: 6, randomness: 0.35 };
+    case 'medium':
+      return { depth: 2, candidateLimit: 8, randomness: 0.1 };
+    case 'hard':
+      return { depth: 3, candidateLimit: 10, randomness: 0 };
+    default:
+      return { depth: 2, candidateLimit: 8, randomness: 0.1 };
+  }
+}
+
+function generateCandidateMoves(
+  board: Cell[][],
+  player: 'black' | 'white',
+  limit: number
+): CandidateMove[] {
+  const opponent = player === 'black' ? 'white' : 'black';
+  const candidates: CandidateMove[] = [];
+  let hasStone = false;
+
+  for (let row = 0; row < 19 && !hasStone; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] !== null) {
+        hasStone = true;
+        break;
+      }
+    }
+  }
+
+  if (!hasStone) {
+    return [{ row: 9, col: 9, score: 0 }];
+  }
+
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] !== null) {
+        continue;
+      }
+
+      if (!hasNeighbor(board, row, col, 2)) {
+        continue;
+      }
+
+      const attackScore = evaluatePositionClient(board, row, col, player);
+      const defenseScore = evaluatePositionClient(board, row, col, opponent);
+      let score = attackScore * 1.15 + defenseScore * 1.05 + getPositionValueClient(row, col) * 25;
+
+      if (attackScore >= 9000) {
+        score += 15000;
+      }
+
+      if (defenseScore >= 9000) {
+        score += 12000;
+      }
+
+      candidates.push({ row, col, score });
+    }
+  }
+
+  if (candidates.length === 0) {
+    const fallback = findFirstEmptyCell(board);
+    if (!fallback) {
+      return [];
+    }
+    return [{ row: fallback.row, col: fallback.col, score: 0 }];
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+
+  return candidates.slice(0, limit);
+}
+
+function minimaxSearch(
+  board: Cell[][],
+  depth: number,
+  alpha: number,
+  beta: number,
+  maximizing: boolean,
+  player: 'black' | 'white',
+  opponent: 'black' | 'white',
+  candidateLimit: number
+): number {
+  if (hasFiveInRow(board, player)) {
+    return 40000 + depth * 100;
+  }
+
+  if (hasFiveInRow(board, opponent)) {
+    return -40000 - depth * 100;
+  }
+
+  if (depth === 0) {
+    return evaluateBoardState(board, player, opponent);
+  }
+
+  const current = maximizing ? player : opponent;
+  const moves = generateCandidateMoves(board, current, candidateLimit);
+
+  if (moves.length === 0) {
+    return evaluateBoardState(board, player, opponent);
+  }
+
+  if (maximizing) {
+    let value = -Infinity;
+
+    for (const move of moves) {
+      board[move.row][move.col] = current;
+      const score = minimaxSearch(board, depth - 1, alpha, beta, false, player, opponent, candidateLimit);
+      board[move.row][move.col] = null;
+
+      value = Math.max(value, score);
+      alpha = Math.max(alpha, value);
+
+      if (beta <= alpha) {
+        break;
+      }
+    }
+
+    return value;
+  }
+
+  let value = Infinity;
+
+  for (const move of moves) {
+    board[move.row][move.col] = current;
+    const score = minimaxSearch(board, depth - 1, alpha, beta, true, player, opponent, candidateLimit);
+    board[move.row][move.col] = null;
+
+    value = Math.min(value, score);
+    beta = Math.min(beta, value);
+
+    if (beta <= alpha) {
+      break;
+    }
+  }
+
+  return value;
+}
+
+function evaluateBoardState(
+  board: Cell[][],
+  player: 'black' | 'white',
+  opponent: 'black' | 'white'
+): number {
+  if (hasFiveInRow(board, player)) {
+    return 40000;
+  }
+
+  if (hasFiveInRow(board, opponent)) {
+    return -40000;
+  }
+
+  let playerPattern = 0;
+  let opponentPattern = 0;
+  let playerCenterControl = 0;
+  let opponentCenterControl = 0;
+  const playerPotentials: number[] = [];
+  const opponentPotentials: number[] = [];
+  let playerMobility = 0;
+  let opponentMobility = 0;
+
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      const cell = board[row][col];
+
+      if (cell === player) {
+        playerPattern += evaluateLocalPattern(board, row, col, player);
+        playerCenterControl += getPositionValueClient(row, col);
+      } else if (cell === opponent) {
+        opponentPattern += evaluateLocalPattern(board, row, col, opponent);
+        opponentCenterControl += getPositionValueClient(row, col);
+      } else {
+        if (!hasNeighbor(board, row, col, 2)) {
+          continue;
+        }
+
+        const attackScore = evaluatePositionClient(board, row, col, player);
+        const defenseScore = evaluatePositionClient(board, row, col, opponent);
+
+        playerPotentials.push(attackScore);
+        opponentPotentials.push(defenseScore);
+
+        if (attackScore > 0) {
+          playerMobility++;
+        }
+
+        if (defenseScore > 0) {
+          opponentMobility++;
+        }
+      }
+    }
+  }
+
+  playerPotentials.sort((a, b) => b - a);
+  opponentPotentials.sort((a, b) => b - a);
+
+  const playerTopPotential = playerPotentials.slice(0, 4).reduce((sum, value) => sum + value, 0);
+  const opponentTopPotential = opponentPotentials.slice(0, 4).reduce((sum, value) => sum + value, 0);
+
+  const patternScore = (playerPattern - opponentPattern) * 15;
+  const centerScore = (playerCenterControl - opponentCenterControl) * 10;
+  const potentialScore = (playerTopPotential - opponentTopPotential) * 0.8;
+  const mobilityScore = (playerMobility - opponentMobility) * 80;
+
+  return patternScore + centerScore + potentialScore + mobilityScore;
+}
+
+function hasFiveInRow(board: Cell[][], player: 'black' | 'white'): boolean {
+  for (let row = 0; row < 19; row++) {
+    for (let col = 0; col < 19; col++) {
+      if (board[row][col] === player && checkWinningMove(board, row, col)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 // 简单的神经网络模型（预先设定权重，没有实际训练过程）

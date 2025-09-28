@@ -71,27 +71,27 @@ export default function Home() {
     {
       name: 'OpenAI',
       baseUrl: 'https://api.openai.com/v1',
-      models: ['gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo']
+      models: ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini', 'o1', 'o1-mini']
     },
     {
       name: 'Anthropic',
       baseUrl: 'https://api.anthropic.com/v1',
-      models: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku']
+      models: ['claude-3.5-sonnet', 'claude-3.5-haiku', 'claude-3-opus']
     },
     {
       name: 'Deepseek',
       baseUrl: 'https://api.deepseek.com/v1',
-      models: ['deepseek-chat', 'deepseek-coder']
+      models: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
     },
     {
       name: 'Qwen',
       baseUrl: 'https://dashscope.aliyuncs.com/api/v1',
-      models: ['qwen-max', 'qwen-plus', 'qwen-turbo']
+      models: ['qwen2.5-72b-instruct', 'qwen2.5-32b-instruct', 'qwen-max']
     },
     {
       name: 'Gemini',
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
-      models: ['gemini-pro', 'gemini-1.5-pro']
+      models: ['gemini-1.5-pro-latest', 'gemini-1.5-flash', 'gemini-1.0-pro']
     },
     {
       name: 'Custom',
@@ -108,7 +108,7 @@ export default function Home() {
   const [blackApiConfig, setBlackApiConfig] = useState<ApiConfig>({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o-mini',
     isAI: false,
     provider: 'OpenAI',
     computerAlgorithm: 'LocalEval',
@@ -117,7 +117,7 @@ export default function Home() {
   const [whiteApiConfig, setWhiteApiConfig] = useState<ApiConfig>({
     apiKey: '',
     baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-3.5-turbo',
+    model: 'gpt-4o-mini',
     isAI: false,
     provider: 'OpenAI',
     computerAlgorithm: 'LocalEval',
@@ -127,8 +127,8 @@ export default function Home() {
   const [whiteProvider, setWhiteProvider] = useState<Provider>('OpenAI');
   const [blackCustomBaseUrl, setBlackCustomBaseUrl] = useState('');
   const [whiteCustomBaseUrl, setWhiteCustomBaseUrl] = useState('');
-  const [blackModel, setBlackModel] = useState('gpt-4o');
-  const [whiteModel, setWhiteModel] = useState('gpt-4o');
+  const [blackModel, setBlackModel] = useState('gpt-4o-mini');
+  const [whiteModel, setWhiteModel] = useState('gpt-4o-mini');
   
   // 自定义指令设置
   const [blackPromptType, setBlackPromptType] = useState<'default' | 'custom'>('default');
