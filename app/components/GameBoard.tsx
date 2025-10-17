@@ -22,6 +22,40 @@ interface ForbiddenRules {
   doubleThree: boolean; // 双三禁手
 }
 
+export interface GameBoardCopy {
+  players: {
+    black: string;
+    white: string;
+  };
+  status: {
+    victory: string;
+    draw: string;
+    turn: string;
+  };
+  victoryModal: {
+    celebration: string;
+    keepWatching: string;
+  };
+  aiTagSuffix: string;
+  actions: {
+    nextMove: string;
+    restart: string;
+    backToSettings: string;
+  };
+  training: {
+    title: string;
+    description: string;
+    progressLabel: string;
+    completed: string;
+    cta: string;
+    doneMessage: string;
+  };
+  history: {
+    title: string;
+  };
+  algorithms: Record<ComputerAlgorithm, string>;
+}
+
 interface GameBoardProps {
   blackPlayer: PlayerType;
   whitePlayer: PlayerType;
@@ -36,6 +70,7 @@ interface GameBoardProps {
   autoPlay: boolean;
   onReturnToSettings?: () => void;
   forbiddenRules: ForbiddenRules;
+  copy: GameBoardCopy;
 }
 
 // 客户端AI逻辑函数
@@ -1460,7 +1495,8 @@ export default function GameBoard({
   whiteCustomPrompt,
   autoPlay,
   onReturnToSettings,
-  forbiddenRules
+  forbiddenRules,
+  copy
 }: GameBoardProps) {
   const [board, setBoard] = useState<Cell[][]>(Array(19).fill(null).map(() => Array(19).fill(null)));
   const [currentPlayer, setCurrentPlayer] = useState<'black' | 'white'>('black');
@@ -1479,6 +1515,14 @@ export default function GameBoard({
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
   const [isNNTrained, setIsNNTrained] = useState(false);
+
+  const getPlayerLabel = (player: 'black' | 'white') => copy.players[player];
+  const formatStatusVictory = (player: 'black' | 'white') =>
+    copy.status.victory.replace('{player}', getPlayerLabel(player));
+  const formatStatusTurn = (player: 'black' | 'white') =>
+    copy.status.turn.replace('{player}', getPlayerLabel(player));
+  const formatVictoryCelebration = (playerName: string) =>
+    copy.victoryModal.celebration.replace('{player}', playerName);
 
   // 神经网络训练函数 - 实际增强算法
   const trainNeuralNetwork = () => {
@@ -1505,7 +1549,7 @@ export default function GameBoard({
         setIsNNTrained(true);
         
         // 显示训练完成的消息
-        setErrorMessage("神经网络训练完成！模型性能已提升。");
+        setErrorMessage(copy.training.doneMessage);
         setTimeout(() => {
           setErrorMessage(null);
         }, 3000);
@@ -2205,14 +2249,8 @@ export default function GameBoard({
   };
 
   // 获取算法显示名称
-  const getAlgoDisplayName = (algorithm: ComputerAlgorithm): string => {
-    const algoNames: Record<ComputerAlgorithm, string> = {
-      'LocalEval': '局部评估',
-      'NeuralNetwork': '神经网络',
-      'TSS': '威胁空间搜索'
-    };
-    return algoNames[algorithm] || '局部评估';
-  };
+  const getAlgoDisplayName = (algorithm: ComputerAlgorithm): string =>
+    copy.algorithms[algorithm] || copy.algorithms.LocalEval;
 
   // 检查是否形成活四（两端开放的四子连线）
   function checkOpenFour(board: Cell[][], row: number, col: number, player: 'black' | 'white'): boolean {
@@ -2257,8 +2295,8 @@ export default function GameBoard({
               <p className="font-semibold">{errorMessage}</p>
               <p className="text-xs opacity-80">
                 {currentPlayer === 'black' 
-                  ? blackPlayer === 'ai' ? `${blackApiConfig.model} → 电脑AI` : '' 
-                  : whitePlayer === 'ai' ? `${whiteApiConfig.model} → 电脑AI` : ''}
+                  ? blackPlayer === 'ai' ? `${blackApiConfig.model}${copy.aiTagSuffix}` : '' 
+                  : whitePlayer === 'ai' ? `${whiteApiConfig.model}${copy.aiTagSuffix}` : ''}
               </p>
             </div>
           </div>
@@ -2277,24 +2315,25 @@ export default function GameBoard({
             <div className="text-center">
               <div className="text-3xl font-bold mb-4 flex items-center justify-center gap-3">
                 <span className={`inline-block w-8 h-8 rounded-full ${winner === 'black' ? 'bg-black' : 'bg-white border border-gray-300'}`}></span>
-                <span>{winner === 'black' ? '黑方' : '白方'}胜利!</span>
+                <span>{formatStatusVictory(winner)}</span>
               </div>
               <p className="text-xl mb-6">
-                {winner === 'black' ? getPlayerDisplayName('black') : getPlayerDisplayName('white')} 
-                以出色的表现赢得了比赛！
+                {formatVictoryCelebration(
+                  winner === 'black' ? getPlayerDisplayName('black') : getPlayerDisplayName('white')
+                )}
               </p>
               <div className="flex justify-center gap-3">
                 <button 
                   className="btn btn-primary" 
                   onClick={() => setShowVictoryModal(false)}
                 >
-                  继续观看棋盘
+                  {copy.victoryModal.keepWatching}
                 </button>
                 <button 
                   className="btn btn-accent" 
                   onClick={resetGame}
                 >
-                  重新开始
+                  {copy.actions.restart}
                 </button>
               </div>
             </div>
@@ -2363,16 +2402,16 @@ export default function GameBoard({
                   <span 
                     className={`inline-block w-6 h-6 rounded-full ${winner === 'black' ? 'bg-black' : 'bg-white border border-gray-300'}`}
                   ></span>
-                  <span>{winner === 'black' ? '黑方' : '白方'}胜利!</span>
+                  <span>{formatStatusVictory(winner)}</span>
                 </div>
-              ) : '平局'
+              ) : copy.status.draw
             ) : (
               <div className="flex items-center gap-2">
                 <span 
                   className={`inline-block w-6 h-6 rounded-full ${currentPlayer === 'black' ? 'bg-black' : 'bg-white border border-gray-300'}`}
                 ></span>
                 <span>
-                  {currentPlayer === 'black' ? '黑方' : '白方'}回合
+                  {formatStatusTurn(currentPlayer)}
                   {getCurrentPlayerType() === 'ai' && ` (${
                     currentPlayer === 'black' ? blackApiConfig.model : whiteApiConfig.model
                   })`}
@@ -2398,21 +2437,21 @@ export default function GameBoard({
                 onClick={handleNextAIMove}
                 disabled={isThinking}
               >
-                下一步
+                {copy.actions.nextMove}
               </button>
             )}
             <button
               className="btn btn-accent"
               onClick={resetGame}
             >
-              重新开始
+              {copy.actions.restart}
             </button>
             {onReturnToSettings && (
               <button 
                 className="btn btn-neutral"
                 onClick={onReturnToSettings}
               >
-                返回设置
+                {copy.actions.backToSettings}
               </button>
             )}
           </div>
@@ -2424,13 +2463,13 @@ export default function GameBoard({
           <div className="mt-2 p-3 bg-info bg-opacity-10 rounded-lg">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
               <div>
-                <h3 className="font-bold">神经网络训练</h3>
-                <p className="text-sm">训练神经网络模型以提高棋力</p>
+                <h3 className="font-bold">{copy.training.title}</h3>
+                <p className="text-sm">{copy.training.description}</p>
               </div>
               {isTraining ? (
                 <div className="w-full sm:w-64">
                   <div className="flex items-center mb-1 justify-between">
-                    <span className="text-sm">训练进度:</span>
+                    <span className="text-sm">{copy.training.progressLabel}</span>
                     <span className="text-sm font-bold">{trainingProgress}%</span>
                   </div>
                   <progress 
@@ -2445,7 +2484,7 @@ export default function GameBoard({
                   onClick={trainNeuralNetwork}
                   disabled={isTraining || isNNTrained}
                 >
-                  {isNNTrained ? '已完成训练' : '预训练神经网络'}
+                  {isNNTrained ? copy.training.completed : copy.training.cta}
                 </button>
               )}
             </div>
@@ -2455,7 +2494,7 @@ export default function GameBoard({
         {/* 移动历史记录 */}
         {moveHistory.length > 0 && (
           <div className="mt-2">
-            <h3 className="font-bold mb-2">历史记录</h3>
+            <h3 className="font-bold mb-2">{copy.history.title}</h3>
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-1 text-xs">
               {moveHistory.map((move, index) => (
                 <div key={index} className="bg-base-100 p-1 rounded flex items-center gap-1">
